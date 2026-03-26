@@ -12,6 +12,8 @@ import (
 func JSON(scanReport report.ScanReport) ([]byte, error) {
 	var buf bytes.Buffer
 
+	scanReport.Results = ensureResults(scanReport.Results)
+
 	encoder := json.NewEncoder(&buf)
 	encoder.SetEscapeHTML(false)
 	encoder.SetIndent("", "  ")
@@ -36,11 +38,19 @@ func Plain(scanReport report.ScanReport) []byte {
 			result.Bytes,
 			formatNullableMethod(result.Method),
 			result.Status,
-			result.Path,
+			escapePlainPath(result.Path),
 		))
 	}
 
 	return []byte(strings.Join(lines, "\n") + "\n")
+}
+
+func ensureResults(results []report.Result) []report.Result {
+	if results == nil {
+		return []report.Result{}
+	}
+
+	return results
 }
 
 func formatNullableInt(value *int64) string {
@@ -57,4 +67,15 @@ func formatNullableMethod(value *report.Method) string {
 	}
 
 	return string(*value)
+}
+
+func escapePlainPath(path string) string {
+	replacer := strings.NewReplacer(
+		`\`, `\\`,
+		"\t", `\t`,
+		"\n", `\n`,
+		"\r", `\r`,
+	)
+
+	return replacer.Replace(path)
 }

@@ -1,6 +1,8 @@
 package format
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -38,6 +40,55 @@ func TestPlainEmptyResults(t *testing.T) {
 	got := Plain(report.ScanReport{})
 	if len(got) != 0 {
 		t.Fatalf("expected empty output for empty results, got %q", got)
+	}
+}
+
+func TestJSONEmptyResultsUsesArray(t *testing.T) {
+	t.Parallel()
+
+	got, err := JSON(report.ScanReport{SchemaVersion: report.SchemaVersionV1})
+	if err != nil {
+		t.Fatalf("JSON returned error: %v", err)
+	}
+
+	if !bytes.Contains(got, []byte(`"results": []`)) {
+		t.Fatalf("expected empty results array, got %s", got)
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal(got, &decoded); err != nil {
+		t.Fatalf("json unmarshal: %v", err)
+	}
+
+	results, ok := decoded["results"].([]any)
+	if !ok {
+		t.Fatalf("expected results to decode as array, got %T", decoded["results"])
+	}
+	if len(results) != 0 {
+		t.Fatalf("expected empty results array, got %v", results)
+	}
+}
+
+func TestPlainEscapesUnsafePathCharacters(t *testing.T) {
+	t.Parallel()
+
+	tokens := int64(7)
+	method := report.MethodHeuristic
+	got := Plain(report.ScanReport{
+		Results: []report.Result{
+			{
+				Path:   "dir/with\tbreak\nname\\file.txt",
+				Bytes:  99,
+				Tokens: &tokens,
+				Method: &method,
+				Status: report.StatusCounted,
+			},
+		},
+	})
+
+	want := "7\t99\theuristic\tcounted\tdir/with\\tbreak\\nname\\\\file.txt\n"
+	if string(got) != want {
+		t.Fatalf("plain output mismatch\nwant:\n%s\ngot:\n%s", want, got)
 	}
 }
 

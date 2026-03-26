@@ -378,6 +378,7 @@ Rules:
 - no headers
 - no color
 - no human commentary
+- the `path` field escapes backslash, tab, carriage return, and newline as `\\`, `\t`, `\r`, and `\n`
 
 ### JSON Output
 
