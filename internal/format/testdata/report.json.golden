@@ -1,0 +1,35 @@
+{
+  "schema_version": "v1",
+  "target": ".",
+  "root": ".",
+  "recursive": true,
+  "respect_gitignore": true,
+  "sort": "tokens-desc",
+  "summary": {
+    "files_seen": 2,
+    "files_counted": 1,
+    "files_skipped": 1,
+    "total_bytes": 5801,
+    "total_tokens": 321
+  },
+  "results": [
+    {
+      "path": "README.md",
+      "bytes": 1234,
+      "tokens": 321,
+      "method": "exact",
+      "provider": "openai",
+      "status": "counted",
+      "reason": null
+    },
+    {
+      "path": "assets/logo.png",
+      "bytes": 4567,
+      "tokens": null,
+      "method": null,
+      "provider": null,
+      "status": "skipped",
+      "reason": "binary"
+    }
+  ]
+}

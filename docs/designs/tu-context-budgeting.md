@@ -56,18 +56,35 @@ Current runtime behavior:
 
 This is intentional. Slice 1 establishes the CLI contract before scan/count logic is added.
 
+### Slice 2 Completed
+
+Delivered:
+
+- added `internal/report` with the versioned scan report, summary, result, status, and method types
+- added `internal/format` with the JSON and plain-text formatters
+- locked the initial JSON schema in code under `schema_version = "v1"`
+- locked the plain-text row contract in code
+- added golden tests for JSON and plain formatter output
+
+Current runtime behavior after Slice 2:
+
+- the CLI still does not scan files yet
+- the output contracts are now implemented and test-backed before scan logic begins
+- follow-up work should build scanning against these types instead of inventing output ad hoc
+
 ### Next Slice
 
-Pick up at Milestone 2.
+Pick up at Milestone 3.
 
 Do next:
 
-- define result structs
-- define the versioned JSON schema in code
-- define the plain-text formatter contract in code
-- add golden tests for formatter behavior
+- implement file vs directory targeting
+- implement recursive walking
+- implement `.gitignore` handling
+- classify skipped files into the documented reasons
+- return populated `ScanReport` values using the existing formatter contracts
 
-Do not skip straight to scan logic without first landing those output contracts.
+Do not change the JSON or plain-text contract casually while building scan logic. Extend the scan pipeline to fit the existing report types and golden tests.
 
 ## Not In Scope
 
