@@ -13,10 +13,11 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/richclement/tu/internal/count"
 	"github.com/richclement/tu/internal/report"
 )
 
-const heuristicProvider = "heuristic"
+const largeFileThresholdBytes int64 = 1 << 20
 
 type Config struct {
 	CWD              string
@@ -67,13 +68,15 @@ func BuildReport(cfg Config) (report.ScanReport, error) {
 		return report.ScanReport{}, err
 	}
 
+	counter := count.NewCounter()
+
 	if info.IsDir() {
-		scanReport.Results, err = scanDirectory(targetAbs, rootAbs, recursive, matcher)
+		scanReport.Results, err = scanDirectory(targetAbs, rootAbs, recursive, matcher, counter)
 		if err != nil {
 			return report.ScanReport{}, err
 		}
 	} else {
-		result := scanFile(targetAbs, rootAbs)
+		result := scanFile(targetAbs, rootAbs, counter)
 		scanReport.Results = append(scanReport.Results, result)
 	}
 
@@ -83,7 +86,7 @@ func BuildReport(cfg Config) (report.ScanReport, error) {
 	return scanReport, nil
 }
 
-func scanDirectory(targetAbs string, rootAbs string, recursive bool, matcher *ignoreMatcher) ([]report.Result, error) {
+func scanDirectory(targetAbs string, rootAbs string, recursive bool, matcher *ignoreMatcher, counter *count.Counter) ([]report.Result, error) {
 	results := make([]report.Result, 0)
 
 	err := filepath.WalkDir(targetAbs, func(currentPath string, entry fs.DirEntry, walkErr error) error {
@@ -124,7 +127,7 @@ func scanDirectory(targetAbs string, rootAbs string, recursive bool, matcher *ig
 			return nil
 		}
 
-		results = append(results, scanFile(currentPath, rootAbs))
+		results = append(results, scanFile(currentPath, rootAbs, counter))
 		return nil
 	})
 	if err != nil {
@@ -134,7 +137,7 @@ func scanDirectory(targetAbs string, rootAbs string, recursive bool, matcher *ig
 	return results, nil
 }
 
-func scanFile(absPath string, rootAbs string) report.Result {
+func scanFile(absPath string, rootAbs string, counter *count.Counter) report.Result {
 	displayPath := relativePath(rootAbs, absPath)
 
 	info, err := os.Stat(absPath)
@@ -146,6 +149,10 @@ func scanFile(absPath string, rootAbs string) report.Result {
 		return skippedResult(displayPath, info.Size(), "unreadable")
 	}
 
+	if info.Size() > largeFileThresholdBytes {
+		return skippedResult(displayPath, info.Size(), "too-large")
+	}
+
 	contents, err := os.ReadFile(absPath)
 	if err != nil {
 		return skippedFromError(displayPath, info.Size(), err)
@@ -155,9 +162,10 @@ func scanFile(absPath string, rootAbs string) report.Result {
 		return skippedResult(displayPath, info.Size(), reason)
 	}
 
-	tokens := estimateTokens(contents)
-	method := report.MethodHeuristic
-	provider := heuristicProvider
+	counted := counter.CountText(string(contents))
+	tokens := counted.Tokens
+	method := counted.Method
+	provider := counted.Provider
 
 	return report.Result{
 		Path:     displayPath,
@@ -226,23 +234,6 @@ func compareTokens(left report.Result, right report.Result, ascending bool) bool
 	}
 
 	return left.Path < right.Path
-}
-
-func estimateTokens(contents []byte) int64 {
-	if len(contents) == 0 {
-		return 0
-	}
-
-	runeCount := utf8.RuneCount(contents)
-	tokens := int64(runeCount / 4)
-	if runeCount%4 != 0 {
-		tokens++
-	}
-	if tokens == 0 {
-		return 1
-	}
-
-	return tokens
 }
 
 func classifyContents(contents []byte) (string, bool) {

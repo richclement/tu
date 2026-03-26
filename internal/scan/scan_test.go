@@ -120,6 +120,12 @@ func TestBuildReportFileTarget(t *testing.T) {
 	if report.Results[0].Status != reportpkg.StatusCounted {
 		t.Fatalf("expected counted result, got %q", report.Results[0].Status)
 	}
+	if report.Results[0].Method == nil || *report.Results[0].Method != reportpkg.MethodExact {
+		t.Fatalf("expected exact method for file target, got %+v", report.Results[0].Method)
+	}
+	if report.Results[0].Provider == nil || *report.Results[0].Provider != "openai" {
+		t.Fatalf("expected openai provider for file target, got %+v", report.Results[0].Provider)
+	}
 }
 
 func TestBuildReportClassifiesSkippedFiles(t *testing.T) {
@@ -151,8 +157,37 @@ func TestBuildReportClassifiesSkippedFiles(t *testing.T) {
 	if byPath["README.md"].Status != reportpkg.StatusCounted {
 		t.Fatalf("expected README.md to be counted, got %+v", byPath["README.md"])
 	}
+	if byPath["README.md"].Method == nil || *byPath["README.md"].Method != reportpkg.MethodExact {
+		t.Fatalf("expected README.md to use exact counting, got %+v", byPath["README.md"])
+	}
 	if report.Summary.FilesSkipped != 2 {
 		t.Fatalf("expected 2 skipped files, got %d", report.Summary.FilesSkipped)
+	}
+}
+
+func TestBuildReportSkipsTooLargeFiles(t *testing.T) {
+	t.Parallel()
+
+	root := tempRepo(t)
+	writeFile(t, filepath.Join(root, "large.txt"), slices.Repeat([]byte("x"), int(largeFileThresholdBytes)+1))
+
+	report, err := BuildReport(Config{
+		CWD:              filepath.Dir(root),
+		Target:           filepath.Base(root),
+		Recursive:        true,
+		RespectGitIgnore: true,
+		Sort:             "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	result := resultsByPath(report.Results)["large.txt"]
+	if result.Reason == nil || *result.Reason != "too-large" {
+		t.Fatalf("expected too-large skip, got %+v", result)
+	}
+	if result.Method != nil || result.Provider != nil || result.Tokens != nil {
+		t.Fatalf("expected too-large skip to have no count metadata, got %+v", result)
 	}
 }
 

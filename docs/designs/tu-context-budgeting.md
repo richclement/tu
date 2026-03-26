@@ -92,15 +92,32 @@ Current runtime behavior after Slice 3:
 - skipped files are preserved in machine output with explicit reasons
 - default human output prints a triage table to stdout and a summary to stderr
 
+### Slice 4 Completed
+
+Delivered:
+
+- added `internal/count` with a small exact-first counter seam
+- integrated a local `cl100k_base` tokenizer for exact counts without runtime downloads
+- kept heuristic counting as the fallback path when exact counting is unavailable
+- added large-file threshold handling that records oversized files as `skipped` with reason `too-large`
+- preserved the existing JSON and plain-text contracts while introducing exact-vs-heuristic provider labeling
+
+Current runtime behavior after Slice 4:
+
+- normal text files are counted exactly with `method=exact` and `provider=openai`
+- heuristic counting remains available as a fallback path
+- files above the internal large-file threshold are skipped explicitly as `too-large`
+- machine output remains stable while count metadata is now richer
+
 ### Next Slice
 
-Pick up at Milestone 4.
+Pick up at Milestone 5.
 
 Do next:
 
-- add the exact local tokenizer path and make heuristic counting a true fallback instead of the default
-- add the large-file threshold behavior from the design contract
-- preserve the current output contracts while introducing exact-vs-heuristic provider labeling
+- introduce the bounded worker pool from the performance plan
+- preserve deterministic ordering while counting concurrently
+- benchmark representative fixture repos and tune the large-file threshold if needed
 
 Do not change the JSON or plain-text contract casually while building scan logic. Extend the scan pipeline to fit the existing report types and golden tests.
 
