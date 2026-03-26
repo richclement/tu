@@ -31,6 +31,44 @@ Ship a boring, offline-first CLI that:
 - uses one exact local tokenizer path plus a heuristic fallback
 - ships installable binaries via GitHub Releases
 
+## Implementation Status
+
+### Slice 1 Completed
+
+Completed on branch `feat/cli-skeleton`.
+
+Delivered:
+
+- initialized the Go module
+- added the `cmd/tu` entrypoint
+- added the `internal/cli` package for option parsing and command execution
+- implemented `--help` and `--version`
+- implemented documented validation rules for path count, output-mode conflicts, and supported sort modes
+- implemented documented exit-code behavior for success, invalid usage, and runtime-not-implemented cases
+- added tests covering parsing, validation, help/version, and exit behavior
+
+Current runtime behavior:
+
+- `tu --help` works
+- `tu --version` works
+- invalid CLI usage returns exit code `2` with actionable stderr
+- valid non-help invocations currently return exit code `1` with a clear "not implemented yet" runtime message
+
+This is intentional. Slice 1 establishes the CLI contract before scan/count logic is added.
+
+### Next Slice
+
+Pick up at Milestone 2.
+
+Do next:
+
+- define result structs
+- define the versioned JSON schema in code
+- define the plain-text formatter contract in code
+- add golden tests for formatter behavior
+
+Do not skip straight to scan logic without first landing those output contracts.
+
 ## Not In Scope
 
 - remote provider counting in v1
