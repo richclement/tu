@@ -64,6 +64,8 @@ Delivered:
 - added `internal/format` with the JSON and plain-text formatters
 - locked the initial JSON schema in code under `schema_version = "v1"`
 - locked the plain-text row contract in code
+- normalized empty JSON reports to emit `results: []`
+- escaped delimiter-breaking characters in plain-text paths
 - added golden tests for JSON and plain formatter output
 
 Current runtime behavior after Slice 2:
@@ -72,17 +74,33 @@ Current runtime behavior after Slice 2:
 - the output contracts are now implemented and test-backed before scan logic begins
 - follow-up work should build scanning against these types instead of inventing output ad hoc
 
+### Slice 3 Completed
+
+Delivered:
+
+- added `internal/scan` with file and directory targeting
+- implemented recursive walking plus `--non-recursive`
+- implemented repo-aware `.gitignore` handling, including nested `.gitignore` files under the scan root
+- classified skipped files as `binary`, `decode-failed`, `permission-denied`, or `unreadable`
+- wired the CLI to emit real human, JSON, and plain outputs from populated `ScanReport` values
+- added fixture-based scan coverage and CLI execution tests
+
+Current runtime behavior after Slice 3:
+
+- `tu` now scans files and directories successfully
+- counted files currently use heuristic token estimates
+- skipped files are preserved in machine output with explicit reasons
+- default human output prints a triage table to stdout and a summary to stderr
+
 ### Next Slice
 
-Pick up at Milestone 3.
+Pick up at Milestone 4.
 
 Do next:
 
-- implement file vs directory targeting
-- implement recursive walking
-- implement `.gitignore` handling
-- classify skipped files into the documented reasons
-- return populated `ScanReport` values using the existing formatter contracts
+- add the exact local tokenizer path and make heuristic counting a true fallback instead of the default
+- add the large-file threshold behavior from the design contract
+- preserve the current output contracts while introducing exact-vs-heuristic provider labeling
 
 Do not change the JSON or plain-text contract casually while building scan logic. Extend the scan pipeline to fit the existing report types and golden tests.
 
@@ -472,8 +490,8 @@ The point is separation by responsibility, not abstraction for abstraction's sak
 ### Milestone 4: Counting
 
 - add exact local tokenizer path
-- add heuristic fallback
-- wire in status/method labeling
+- retain heuristic fallback once exact counting exists
+- refine provider labeling for exact vs heuristic counts
 - add large-file handling
 
 ### Milestone 5: Performance

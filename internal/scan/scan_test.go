@@ -1,0 +1,308 @@
+package scan
+
+import (
+	"io/fs"
+	"os"
+	"path/filepath"
+	"slices"
+	"testing"
+
+	reportpkg "github.com/richclement/tu/internal/report"
+)
+
+func TestBuildReportDirectoryRespectsGitIgnore(t *testing.T) {
+	t.Parallel()
+
+	report, err := BuildReport(Config{
+		CWD:              fixtureParentDir(t),
+		Target:           "repo",
+		Recursive:        true,
+		RespectGitIgnore: true,
+		Sort:             "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	if report.Target != "repo" {
+		t.Fatalf("expected target repo, got %q", report.Target)
+	}
+	if report.Root != "repo" {
+		t.Fatalf("expected root repo, got %q", report.Root)
+	}
+	if !report.Recursive {
+		t.Fatal("expected recursive report")
+	}
+	if !report.RespectGitIgnore {
+		t.Fatal("expected gitignore to be respected")
+	}
+
+	paths := resultPaths(report.Results)
+	if slices.Contains(paths, "ignored/secret.txt") {
+		t.Fatalf("expected ignored file to be excluded, got %v", paths)
+	}
+	if slices.Contains(paths, "debug.tmp") {
+		t.Fatalf("expected tmp file to be excluded, got %v", paths)
+	}
+	if slices.Contains(paths, "nested/local.log") {
+		t.Fatalf("expected nested ignored file to be excluded, got %v", paths)
+	}
+	if !slices.Contains(paths, "README.md") || !slices.Contains(paths, "nested/child.txt") {
+		t.Fatalf("expected counted files in report, got %v", paths)
+	}
+}
+
+func TestBuildReportNoGitIgnoreIncludesIgnoredFiles(t *testing.T) {
+	t.Parallel()
+
+	report, err := BuildReport(Config{
+		CWD:              fixtureParentDir(t),
+		Target:           "repo",
+		Recursive:        true,
+		RespectGitIgnore: false,
+		Sort:             "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	paths := resultPaths(report.Results)
+	for _, expected := range []string{"ignored/secret.txt", "debug.tmp", "nested/local.log"} {
+		if !slices.Contains(paths, expected) {
+			t.Fatalf("expected %q in results, got %v", expected, paths)
+		}
+	}
+}
+
+func TestBuildReportNonRecursiveSkipsNestedDirectories(t *testing.T) {
+	t.Parallel()
+
+	report, err := BuildReport(Config{
+		CWD:              fixtureParentDir(t),
+		Target:           "repo",
+		Recursive:        false,
+		RespectGitIgnore: true,
+		Sort:             "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	paths := resultPaths(report.Results)
+	if slices.Contains(paths, "nested/child.txt") || slices.Contains(paths, "nested/local.txt") {
+		t.Fatalf("expected nested files to be skipped in non-recursive mode, got %v", paths)
+	}
+}
+
+func TestBuildReportFileTarget(t *testing.T) {
+	t.Parallel()
+
+	report, err := BuildReport(Config{
+		CWD:              fixtureParentDir(t),
+		Target:           filepath.ToSlash(filepath.Join("repo", "nested", "child.txt")),
+		Recursive:        true,
+		RespectGitIgnore: true,
+		Sort:             "tokens-desc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	if report.Root != "repo/nested" {
+		t.Fatalf("expected file target root repo/nested, got %q", report.Root)
+	}
+	if len(report.Results) != 1 {
+		t.Fatalf("expected one file result, got %d", len(report.Results))
+	}
+	if report.Results[0].Path != "child.txt" {
+		t.Fatalf("expected child.txt path, got %q", report.Results[0].Path)
+	}
+	if report.Results[0].Status != reportpkg.StatusCounted {
+		t.Fatalf("expected counted result, got %q", report.Results[0].Status)
+	}
+}
+
+func TestBuildReportClassifiesSkippedFiles(t *testing.T) {
+	t.Parallel()
+
+	root := tempRepo(t)
+	writeFile(t, filepath.Join(root, "README.md"), []byte("plain text for heuristic counting\n"))
+	writeFile(t, filepath.Join(root, "binary.dat"), []byte{0x00, 0x01, 0x02, 0x03})
+	writeFile(t, filepath.Join(root, "invalid.txt"), []byte{0xff, 0xfe, 'a', 'b'})
+
+	report, err := BuildReport(Config{
+		CWD:              filepath.Dir(root),
+		Target:           filepath.Base(root),
+		Recursive:        true,
+		RespectGitIgnore: true,
+		Sort:             "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	byPath := resultsByPath(report.Results)
+	if byPath["binary.dat"].Reason == nil || *byPath["binary.dat"].Reason != "binary" {
+		t.Fatalf("expected binary.dat to be skipped as binary, got %+v", byPath["binary.dat"])
+	}
+	if byPath["invalid.txt"].Reason == nil || *byPath["invalid.txt"].Reason != "decode-failed" {
+		t.Fatalf("expected invalid.txt to be skipped as decode-failed, got %+v", byPath["invalid.txt"])
+	}
+	if byPath["README.md"].Status != reportpkg.StatusCounted {
+		t.Fatalf("expected README.md to be counted, got %+v", byPath["README.md"])
+	}
+	if report.Summary.FilesSkipped != 2 {
+		t.Fatalf("expected 2 skipped files, got %d", report.Summary.FilesSkipped)
+	}
+}
+
+func TestBuildReportClassifiesPermissionDeniedFiles(t *testing.T) {
+	t.Parallel()
+
+	root := tempRepo(t)
+	protectedPath := filepath.Join(root, "protected.txt")
+	writeFile(t, protectedPath, []byte("secret\n"))
+	if err := os.Chmod(protectedPath, 0); err != nil {
+		t.Fatalf("chmod protected file: %v", err)
+	}
+	defer func() {
+		_ = os.Chmod(protectedPath, 0o600)
+	}()
+
+	report, err := BuildReport(Config{
+		CWD:              filepath.Dir(root),
+		Target:           filepath.Base(root),
+		Recursive:        true,
+		RespectGitIgnore: true,
+		Sort:             "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	result := resultsByPath(report.Results)["protected.txt"]
+	if result.Reason == nil || *result.Reason != "permission-denied" {
+		t.Fatalf("expected permission-denied skip, got %+v", result)
+	}
+}
+
+func TestBuildReportSortPathDesc(t *testing.T) {
+	t.Parallel()
+
+	report, err := BuildReport(Config{
+		CWD:              fixtureParentDir(t),
+		Target:           "repo",
+		Recursive:        true,
+		RespectGitIgnore: true,
+		Sort:             "path-desc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	paths := resultPaths(report.Results)
+	if !slices.IsSortedFunc(paths, func(left string, right string) int {
+		switch {
+		case left > right:
+			return -1
+		case left < right:
+			return 1
+		default:
+			return 0
+		}
+	}) {
+		t.Fatalf("expected path-desc order, got %v", paths)
+	}
+}
+
+func fixtureParentDir(t *testing.T) string {
+	t.Helper()
+
+	sourceRoot, err := filepath.Abs(filepath.Join("testdata", "repo"))
+	if err != nil {
+		t.Fatalf("abs testdata path: %v", err)
+	}
+
+	parent := t.TempDir()
+	destRoot := filepath.Join(parent, "repo")
+	copyTree(t, sourceRoot, destRoot)
+	if err := os.MkdirAll(filepath.Join(destRoot, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	writeFile(t, filepath.Join(destRoot, "debug.tmp"), []byte("This file should be ignored when gitignore rules are enabled.\n"))
+	writeFile(t, filepath.Join(destRoot, "ignored", "secret.txt"), []byte("This ignored file should only appear when --no-gitignore is used.\n"))
+	writeFile(t, filepath.Join(destRoot, "nested", "local.log"), []byte("This file is ignored by the nested .gitignore rule.\n"))
+
+	return parent
+}
+
+func tempRepo(t *testing.T) string {
+	t.Helper()
+
+	root := filepath.Join(t.TempDir(), "repo")
+	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	return root
+}
+
+func writeFile(t *testing.T, path string, contents []byte) {
+	t.Helper()
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", path, err)
+	}
+	if err := os.WriteFile(path, contents, 0o600); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+func copyTree(t *testing.T, sourceRoot string, destRoot string) {
+	t.Helper()
+
+	err := filepath.WalkDir(sourceRoot, func(currentPath string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+
+		relPath, err := filepath.Rel(sourceRoot, currentPath)
+		if err != nil {
+			return err
+		}
+
+		destPath := filepath.Join(destRoot, relPath)
+		if entry.IsDir() {
+			return os.MkdirAll(destPath, 0o755)
+		}
+
+		contents, err := os.ReadFile(currentPath)
+		if err != nil {
+			return err
+		}
+
+		return os.WriteFile(destPath, contents, 0o600)
+	})
+	if err != nil {
+		t.Fatalf("copy fixture tree: %v", err)
+	}
+}
+
+func resultPaths(results []reportpkg.Result) []string {
+	paths := make([]string, 0, len(results))
+	for _, result := range results {
+		paths = append(paths, result.Path)
+	}
+
+	return paths
+}
+
+func resultsByPath(results []reportpkg.Result) map[string]reportpkg.Result {
+	byPath := make(map[string]reportpkg.Result, len(results))
+	for _, result := range results {
+		byPath[result.Path] = result
+	}
+
+	return byPath
+}
