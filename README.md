@@ -1,2 +1,2 @@
 # tu
-CLI tool for counting token usage for a file. du for tokenization
+CLI for measuring token usage across files and directories. `du` for tokenization.

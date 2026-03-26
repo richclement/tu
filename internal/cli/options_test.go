@@ -52,6 +52,38 @@ func TestParseOptionsWithPathAndFlags(t *testing.T) {
 	}
 }
 
+func TestParseOptionsWithPathAfterFlags(t *testing.T) {
+	t.Parallel()
+
+	opts, err := ParseOptions([]string{"--json", "--sort=path-desc", "docs"})
+	if err != nil {
+		t.Fatalf("ParseOptions returned error: %v", err)
+	}
+
+	if opts.Path != "docs" {
+		t.Fatalf("expected path docs, got %q", opts.Path)
+	}
+	if opts.Output != OutputJSON {
+		t.Fatalf("expected json output, got %q", opts.Output)
+	}
+	if opts.Sort != SortPathDesc {
+		t.Fatalf("expected sort %q, got %q", SortPathDesc, opts.Sort)
+	}
+}
+
+func TestParseOptionsAllowsDashPrefixedPathAfterDoubleDash(t *testing.T) {
+	t.Parallel()
+
+	opts, err := ParseOptions([]string{"--", "--literal-path"})
+	if err != nil {
+		t.Fatalf("ParseOptions returned error: %v", err)
+	}
+
+	if opts.Path != "--literal-path" {
+		t.Fatalf("expected path --literal-path, got %q", opts.Path)
+	}
+}
+
 func TestParseOptionsHelpAndVersion(t *testing.T) {
 	t.Parallel()
 
@@ -85,6 +117,22 @@ func TestParseOptionsRejectsInvalidSort(t *testing.T) {
 
 	if _, err := ParseOptions([]string{"--sort", "bogus"}); err == nil {
 		t.Fatal("expected invalid sort error, got nil")
+	}
+}
+
+func TestParseOptionsRejectsMissingSortValue(t *testing.T) {
+	t.Parallel()
+
+	if _, err := ParseOptions([]string{"--sort"}); err == nil {
+		t.Fatal("expected missing sort value error, got nil")
+	}
+}
+
+func TestParseOptionsRejectsUnknownFlag(t *testing.T) {
+	t.Parallel()
+
+	if _, err := ParseOptions([]string{"--bogus"}); err == nil {
+		t.Fatal("expected unknown flag error, got nil")
 	}
 }
 
