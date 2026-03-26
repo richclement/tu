@@ -9,8 +9,10 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"unicode/utf8"
 
 	"github.com/richclement/tu/internal/count"
@@ -18,6 +20,7 @@ import (
 )
 
 const largeFileThresholdBytes int64 = 1 << 20
+const maxWorkerCount = 4
 
 type Config struct {
 	CWD              string
@@ -71,7 +74,7 @@ func BuildReport(cfg Config) (report.ScanReport, error) {
 	counter := count.NewCounter()
 
 	if info.IsDir() {
-		scanReport.Results, err = scanDirectory(targetAbs, rootAbs, recursive, matcher, counter)
+		scanReport.Results, err = scanDirectory(targetAbs, rootAbs, recursive, matcher)
 		if err != nil {
 			return report.ScanReport{}, err
 		}
@@ -86,8 +89,36 @@ func BuildReport(cfg Config) (report.ScanReport, error) {
 	return scanReport, nil
 }
 
-func scanDirectory(targetAbs string, rootAbs string, recursive bool, matcher *ignoreMatcher, counter *count.Counter) ([]report.Result, error) {
+func scanDirectory(targetAbs string, rootAbs string, recursive bool, matcher *ignoreMatcher) ([]report.Result, error) {
 	results := make([]report.Result, 0)
+	resultCh := make(chan report.Result, defaultWorkerCount()*2)
+	tasks := make(chan string, defaultWorkerCount()*2)
+
+	var resultsMu sync.Mutex
+	var collectorWG sync.WaitGroup
+	collectorWG.Add(1)
+	go func() {
+		defer collectorWG.Done()
+		for result := range resultCh {
+			resultsMu.Lock()
+			results = append(results, result)
+			resultsMu.Unlock()
+		}
+	}()
+
+	var workerWG sync.WaitGroup
+	for i := 0; i < defaultWorkerCount(); i++ {
+		workerWG.Add(1)
+		go func() {
+			defer workerWG.Done()
+
+			workerCounter := count.NewCounter()
+
+			for taskPath := range tasks {
+				resultCh <- scanFile(taskPath, rootAbs, workerCounter)
+			}
+		}()
+	}
 
 	err := filepath.WalkDir(targetAbs, func(currentPath string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -95,7 +126,7 @@ func scanDirectory(targetAbs string, rootAbs string, recursive bool, matcher *ig
 				return walkErr
 			}
 
-			results = append(results, skippedFromError(relativePath(rootAbs, currentPath), 0, walkErr))
+			resultCh <- skippedFromError(relativePath(rootAbs, currentPath), 0, walkErr)
 			if entry != nil && entry.IsDir() {
 				return filepath.SkipDir
 			}
@@ -127,14 +158,31 @@ func scanDirectory(targetAbs string, rootAbs string, recursive bool, matcher *ig
 			return nil
 		}
 
-		results = append(results, scanFile(currentPath, rootAbs, counter))
+		tasks <- currentPath
 		return nil
 	})
+	close(tasks)
+	workerWG.Wait()
+	close(resultCh)
+	collectorWG.Wait()
+
 	if err != nil {
 		return nil, fmt.Errorf("walk target %q: %w", normalizeTarget(targetAbs), err)
 	}
 
 	return results, nil
+}
+
+func defaultWorkerCount() int {
+	workers := runtime.GOMAXPROCS(0)
+	if workers < 1 {
+		return 1
+	}
+	if workers > maxWorkerCount {
+		return maxWorkerCount
+	}
+
+	return workers
 }
 
 func scanFile(absPath string, rootAbs string, counter *count.Counter) report.Result {

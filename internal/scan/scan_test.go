@@ -250,6 +250,35 @@ func TestBuildReportSortPathDesc(t *testing.T) {
 	}
 }
 
+func TestBuildReportDeterministicUnderConcurrency(t *testing.T) {
+	t.Parallel()
+
+	parent := fixtureParentDir(t)
+	var baseline []reportpkg.Result
+
+	for i := 0; i < 5; i++ {
+		report, err := BuildReport(Config{
+			CWD:              parent,
+			Target:           "repo",
+			Recursive:        true,
+			RespectGitIgnore: true,
+			Sort:             "tokens-desc",
+		})
+		if err != nil {
+			t.Fatalf("BuildReport returned error on run %d: %v", i, err)
+		}
+
+		if i == 0 {
+			baseline = report.Results
+			continue
+		}
+
+		if !slices.EqualFunc(baseline, report.Results, sameResult) {
+			t.Fatalf("expected deterministic results\nbaseline: %+v\ncurrent: %+v", baseline, report.Results)
+		}
+	}
+}
+
 func fixtureParentDir(t *testing.T) string {
 	t.Helper()
 
@@ -340,4 +369,45 @@ func resultsByPath(results []reportpkg.Result) map[string]reportpkg.Result {
 	}
 
 	return byPath
+}
+
+func sameResult(left reportpkg.Result, right reportpkg.Result) bool {
+	if left.Path != right.Path || left.Bytes != right.Bytes || left.Status != right.Status {
+		return false
+	}
+	if !sameNullableInt64(left.Tokens, right.Tokens) {
+		return false
+	}
+	if !sameNullableMethod(left.Method, right.Method) {
+		return false
+	}
+	if !sameNullableString(left.Provider, right.Provider) {
+		return false
+	}
+
+	return sameNullableString(left.Reason, right.Reason)
+}
+
+func sameNullableInt64(left *int64, right *int64) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+
+	return *left == *right
+}
+
+func sameNullableMethod(left *reportpkg.Method, right *reportpkg.Method) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+
+	return *left == *right
+}
+
+func sameNullableString(left *string, right *string) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+
+	return *left == *right
 }

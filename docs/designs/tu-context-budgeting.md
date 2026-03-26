@@ -109,15 +109,30 @@ Current runtime behavior after Slice 4:
 - files above the internal large-file threshold are skipped explicitly as `too-large`
 - machine output remains stable while count metadata is now richer
 
+### Slice 5 Completed
+
+Delivered:
+
+- replaced directory scan counting with a bounded worker pool fed by a single walk
+- kept deterministic output by collecting results concurrently and sorting only after the full scan completes
+- added deterministic-order tests that run the same scan repeatedly under concurrent execution
+- added benchmark coverage for the checked-in fixture repo and a larger synthetic repo shape
+
+Current runtime behavior after Slice 5:
+
+- file counting is now concurrent for directory scans but still bounded
+- final JSON, plain, and human ordering remains deterministic
+- benchmark targets exist for future threshold and worker-count tuning without changing the user-facing contract
+
 ### Next Slice
 
-Pick up at Milestone 5.
+Pick up at Milestone 6.
 
 Do next:
 
-- introduce the bounded worker pool from the performance plan
-- preserve deterministic ordering while counting concurrently
-- benchmark representative fixture repos and tune the large-file threshold if needed
+- add the GitHub Actions test workflow
+- add the tagged release workflow and cross-build matrix
+- verify built binaries against the fixture corpus before publishing release assets
 
 Do not change the JSON or plain-text contract casually while building scan logic. Extend the scan pipeline to fit the existing report types and golden tests.
 
