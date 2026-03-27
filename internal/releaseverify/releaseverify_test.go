@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/richclement/tu/internal/testfixture"
@@ -27,5 +28,47 @@ func TestVerifyBuiltBinary(t *testing.T) {
 
 	if err := Verify(binaryPath, "v0.0.0-test"); err != nil {
 		t.Fatalf("verify built binary: %v", err)
+	}
+}
+
+func TestCompareResultsMismatch(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		wantErr string
+		left    commandResult
+		right   commandResult
+	}{
+		{
+			name:    "exit code mismatch",
+			wantErr: "exit code mismatch",
+			left:    commandResult{exitCode: 0, stdout: "ok", stderr: ""},
+			right:   commandResult{exitCode: 1, stdout: "ok", stderr: ""},
+		},
+		{
+			name:    "stdout mismatch",
+			wantErr: "stdout mismatch",
+			left:    commandResult{exitCode: 0, stdout: "expected", stderr: ""},
+			right:   commandResult{exitCode: 0, stdout: "actual", stderr: ""},
+		},
+		{
+			name:    "stderr mismatch",
+			wantErr: "stderr mismatch",
+			left:    commandResult{exitCode: 0, stdout: "ok", stderr: "expected"},
+			right:   commandResult{exitCode: 0, stdout: "ok", stderr: "actual"},
+		},
+	}
+
+	for _, current := range tests {
+		t.Run(current.name, func(t *testing.T) {
+			err := compareResults("test-case", current.left, current.right)
+			if err == nil {
+				t.Fatal("expected compareResults to report a mismatch")
+			}
+			if !strings.Contains(err.Error(), current.wantErr) {
+				t.Fatalf("expected error to contain %q, got %q", current.wantErr, err.Error())
+			}
+		})
 	}
 }

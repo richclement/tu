@@ -139,7 +139,8 @@ Current runtime behavior after Slice 6:
 
 - pushes and pull requests run `go test ./...` and `go vet ./...` in CI
 - tags matching `v*` build release archives for `darwin`, `linux`, and `windows` across `amd64` and `arm64`
-- release publishing now waits for native binary verification against the canonical fixture corpus
+- release publishing now waits for native binary verification against the canonical fixture corpus on Linux, macOS, and Windows runners
+- secondary cross-built arch archives are packaged in CI but are not executed on GitHub-hosted runners
 - GitHub Release assets are published idempotently and can be updated safely on re-runs
 
 ### Next Slice
