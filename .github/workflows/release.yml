@@ -169,6 +169,12 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
       - name: Download release archives
         uses: actions/download-artifact@v4
         with:
@@ -200,3 +206,45 @@ jobs:
           else
             gh release create "${GITHUB_REF_NAME}" "${files[@]}" --title "${GITHUB_REF_NAME}" --generate-notes
           fi
+
+      - name: Require Homebrew tap token
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        shell: bash
+        run: |
+          if [ -z "${HOMEBREW_TAP_TOKEN}" ]; then
+            echo "HOMEBREW_TAP_TOKEN secret is required to update richclement/homebrew-tap" >&2
+            exit 1
+          fi
+
+      - name: Check out Homebrew tap
+        uses: actions/checkout@v4
+        with:
+          repository: richclement/homebrew-tap
+          ref: main
+          path: dist/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+      - name: Generate Homebrew formula update
+        shell: bash
+        run: |
+          go run ./tools/homebrewtap \
+            --version "${GITHUB_REF_NAME#v}" \
+            --checksums-file "dist/release/checksums.txt" \
+            --tap-dir "dist/homebrew-tap" \
+            --formula-name "tu" \
+            --source-repo "${GITHUB_REPOSITORY}" \
+            --pr-body-file "$RUNNER_TEMP/tu-homebrew-pr-body.md"
+
+      - name: Create Homebrew tap pull request
+        uses: peter-evans/create-pull-request@v8.1.0
+        with:
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: dist/homebrew-tap
+          commit-message: "tu: update to ${{ github.ref_name }}"
+          title: "tu: update to ${{ github.ref_name }}"
+          body-path: ${{ runner.temp }}/tu-homebrew-pr-body.md
+          branch: tu-release-${{ github.ref_name }}
+          base: main
+          add-paths: |
+            Formula/tu.rb
