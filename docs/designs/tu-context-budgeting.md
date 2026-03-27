@@ -377,7 +377,6 @@ Allowed statuses:
 Required per-file fields:
 
 - `path`
-- `bytes`
 - `tokens`
 - `method`
 - `provider`
@@ -421,8 +420,8 @@ Default output is a compact table designed for triage.
 Suggested columns:
 
 - `tokens`
-- `bytes`
 - `method`
+- `status`
 - `path`
 
 After the table, print a short stderr summary when relevant:
@@ -438,7 +437,7 @@ After the table, print a short stderr summary when relevant:
 Suggested format:
 
 ```text
-<tokens>\t<bytes>\t<method>\t<status>\t<path>
+<tokens>\t<method>\t<status>\t<path>
 ```
 
 Rules:
@@ -467,13 +466,11 @@ Schema shape:
     "files_seen": 0,
     "files_counted": 0,
     "files_skipped": 0,
-    "total_bytes": 0,
     "total_tokens": 0
   },
   "results": [
     {
       "path": "README.md",
-      "bytes": 1234,
       "tokens": 321,
       "method": "exact",
       "provider": "openai",
@@ -482,7 +479,6 @@ Schema shape:
     },
     {
       "path": "assets/logo.png",
-      "bytes": 4567,
       "tokens": null,
       "method": null,
       "provider": null,

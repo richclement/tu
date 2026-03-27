@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.2.0] - 2026-03-27
+
+### Changed
+
+- Removed per-file byte-size fields and `summary.total_bytes` from human, `--json`, and `--plain` output so the tool stays focused on token budgeting.
+
 ## [0.1.1.1] - 2026-03-27
 
 ### Changed

@@ -20,13 +20,11 @@ type Summary struct {
 	FilesSeen    int64 `json:"files_seen"`
 	FilesCounted int64 `json:"files_counted"`
 	FilesSkipped int64 `json:"files_skipped"`
-	TotalBytes   int64 `json:"total_bytes"`
 	TotalTokens  int64 `json:"total_tokens"`
 }
 
 type Result struct {
 	Path     string  `json:"path"`
-	Bytes    int64   `json:"bytes"`
 	Tokens   *int64  `json:"tokens"`
 	Method   *Method `json:"method"`
 	Provider *string `json:"provider"`

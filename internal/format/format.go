@@ -33,9 +33,8 @@ func Plain(scanReport report.ScanReport) []byte {
 	lines := make([]string, 0, len(scanReport.Results))
 	for _, result := range scanReport.Results {
 		lines = append(lines, fmt.Sprintf(
-			"%s\t%d\t%s\t%s\t%s",
+			"%s\t%s\t%s\t%s",
 			formatNullableInt(result.Tokens),
-			result.Bytes,
 			formatNullableMethod(result.Method),
 			result.Status,
 			escapePlainPath(result.Path),

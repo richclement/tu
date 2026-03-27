@@ -419,7 +419,7 @@ func resultsByPath(results []reportpkg.Result) map[string]reportpkg.Result {
 }
 
 func sameResult(left reportpkg.Result, right reportpkg.Result) bool {
-	if left.Path != right.Path || left.Bytes != right.Bytes || left.Status != right.Status {
+	if left.Path != right.Path || left.Status != right.Status {
 		return false
 	}
 	if !sameNullableInt64(left.Tokens, right.Tokens) {
