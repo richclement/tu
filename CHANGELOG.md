@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 
 - Pinned the GitHub Actions test and release workflows to immutable SHAs and upgraded `actions/checkout`, `actions/setup-go`, `actions/upload-artifact`, `actions/download-artifact`, and `peter-evans/create-pull-request` to Node 24 compatible releases.
+- Removed per-file byte-size fields and `summary.total_bytes` from human, `--json`, and `--plain` output so the tool stays focused on token budgeting.
 
 ## [0.1.0.0] - 2026-03-26
 

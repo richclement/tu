@@ -16,13 +16,12 @@ func Human(scanReport report.ScanReport) []byte {
 	var buf bytes.Buffer
 	writer := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
 
-	fmt.Fprintln(writer, "TOKENS\tBYTES\tMETHOD\tSTATUS\tPATH")
+	fmt.Fprintln(writer, "TOKENS\tMETHOD\tSTATUS\tPATH")
 	for _, result := range scanReport.Results {
 		fmt.Fprintf(
 			writer,
-			"%s\t%d\t%s\t%s\t%s\n",
+			"%s\t%s\t%s\t%s\n",
 			formatNullableInt(result.Tokens),
-			result.Bytes,
 			formatNullableMethod(result.Method),
 			formatHumanStatus(result),
 			result.Path,

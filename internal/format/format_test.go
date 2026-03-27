@@ -22,6 +22,12 @@ func TestJSONGolden(t *testing.T) {
 	if string(got) != string(want) {
 		t.Fatalf("json golden mismatch\nwant:\n%s\ngot:\n%s", want, got)
 	}
+	if bytes.Contains(got, []byte(`"bytes"`)) {
+		t.Fatalf("expected json output to omit per-result bytes, got %s", got)
+	}
+	if bytes.Contains(got, []byte(`"total_bytes"`)) {
+		t.Fatalf("expected json output to omit total_bytes, got %s", got)
+	}
 }
 
 func TestPlainGolden(t *testing.T) {
@@ -78,7 +84,6 @@ func TestPlainEscapesUnsafePathCharacters(t *testing.T) {
 		Results: []report.Result{
 			{
 				Path:   "dir/with\tbreak\nname\\file.txt",
-				Bytes:  99,
 				Tokens: &tokens,
 				Method: &method,
 				Status: report.StatusCounted,
@@ -86,7 +91,7 @@ func TestPlainEscapesUnsafePathCharacters(t *testing.T) {
 		},
 	})
 
-	want := "7\t99\theuristic\tcounted\tdir/with\\tbreak\\nname\\\\file.txt\n"
+	want := "7\theuristic\tcounted\tdir/with\\tbreak\\nname\\\\file.txt\n"
 	if string(got) != want {
 		t.Fatalf("plain output mismatch\nwant:\n%s\ngot:\n%s", want, got)
 	}
@@ -121,13 +126,11 @@ func sampleReport() report.ScanReport {
 			FilesSeen:    2,
 			FilesCounted: 1,
 			FilesSkipped: 1,
-			TotalBytes:   5801,
 			TotalTokens:  321,
 		},
 		Results: []report.Result{
 			{
 				Path:     "README.md",
-				Bytes:    1234,
 				Tokens:   &countedTokens,
 				Method:   &countedMethod,
 				Provider: &countedProvider,
@@ -136,7 +139,6 @@ func sampleReport() report.ScanReport {
 			},
 			{
 				Path:     "assets/logo.png",
-				Bytes:    4567,
 				Tokens:   nil,
 				Method:   nil,
 				Provider: nil,

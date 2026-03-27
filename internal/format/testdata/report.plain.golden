@@ -1,2 +1,2 @@
-321	1234	exact	counted	README.md
-	4567		skipped	assets/logo.png
+321	exact	counted	README.md
+		skipped	assets/logo.png

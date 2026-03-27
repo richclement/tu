@@ -9,13 +9,11 @@
     "files_seen": 2,
     "files_counted": 1,
     "files_skipped": 1,
-    "total_bytes": 5801,
     "total_tokens": 321
   },
   "results": [
     {
       "path": "README.md",
-      "bytes": 1234,
       "tokens": 321,
       "method": "exact",
       "provider": "openai",
@@ -24,7 +22,6 @@
     },
     {
       "path": "assets/logo.png",
-      "bytes": 4567,
       "tokens": null,
       "method": null,
       "provider": null,

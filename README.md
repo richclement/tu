@@ -9,7 +9,7 @@ tu path/to/repo --json --quiet
 tu path/to/file --plain --quiet
 ```
 
-Default output is a human-readable table on stdout plus summaries or warnings on stderr. Use `--json` or `--plain` for automation, `--non-recursive` to stay at the top level, and `--no-gitignore` to include files that ignore rules would normally skip.
+Default output is a human-readable table on stdout plus summaries or warnings on stderr. Use `--json` or `--plain` for token-focused automation output, `--non-recursive` to stay at the top level, and `--no-gitignore` to include files that ignore rules would normally skip.
 
 ## Installation
 

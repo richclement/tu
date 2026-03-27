@@ -126,7 +126,7 @@ func scanDirectory(targetAbs string, rootAbs string, recursive bool, matcher *ig
 				return walkErr
 			}
 
-			resultCh <- skippedFromError(relativePath(rootAbs, currentPath), 0, walkErr)
+			resultCh <- skippedFromError(relativePath(rootAbs, currentPath), walkErr)
 			if entry != nil && entry.IsDir() {
 				return filepath.SkipDir
 			}
@@ -200,24 +200,24 @@ func scanFile(absPath string, rootAbs string, counter *count.Counter) report.Res
 
 	info, err := os.Stat(absPath)
 	if err != nil {
-		return skippedFromError(displayPath, 0, err)
+		return skippedFromError(displayPath, err)
 	}
 
 	if !info.Mode().IsRegular() {
-		return skippedResult(displayPath, info.Size(), "unreadable")
+		return skippedResult(displayPath, "unreadable")
 	}
 
 	if info.Size() > largeFileThresholdBytes {
-		return skippedResult(displayPath, info.Size(), "too-large")
+		return skippedResult(displayPath, "too-large")
 	}
 
 	contents, err := os.ReadFile(absPath)
 	if err != nil {
-		return skippedFromError(displayPath, info.Size(), err)
+		return skippedFromError(displayPath, err)
 	}
 
 	if reason, ok := classifyContents(contents); ok {
-		return skippedResult(displayPath, info.Size(), reason)
+		return skippedResult(displayPath, reason)
 	}
 
 	counted := counter.CountText(string(contents))
@@ -227,7 +227,6 @@ func scanFile(absPath string, rootAbs string, counter *count.Counter) report.Res
 
 	return report.Result{
 		Path:     displayPath,
-		Bytes:    info.Size(),
 		Tokens:   &tokens,
 		Method:   &method,
 		Provider: &provider,
@@ -240,7 +239,6 @@ func summarize(results []report.Result) report.Summary {
 
 	for _, result := range results {
 		summary.FilesSeen++
-		summary.TotalBytes += result.Bytes
 
 		switch result.Status {
 		case report.StatusCounted:
@@ -330,19 +328,18 @@ func looksBinary(contents []byte) bool {
 	return controlBytes*100/len(sample) >= 10
 }
 
-func skippedFromError(displayPath string, size int64, err error) report.Result {
+func skippedFromError(displayPath string, err error) report.Result {
 	reason := "unreadable"
 	if errors.Is(err, fs.ErrPermission) || os.IsPermission(err) {
 		reason = "permission-denied"
 	}
 
-	return skippedResult(displayPath, size, reason)
+	return skippedResult(displayPath, reason)
 }
 
-func skippedResult(displayPath string, size int64, reason string) report.Result {
+func skippedResult(displayPath string, reason string) report.Result {
 	return report.Result{
 		Path:   displayPath,
-		Bytes:  size,
 		Status: report.StatusSkipped,
 		Reason: &reason,
 	}
