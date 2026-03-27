@@ -114,6 +114,7 @@ Current runtime behavior after Slice 4:
 Delivered:
 
 - replaced directory scan counting with a bounded worker pool fed by a single walk
+- load nested `.gitignore` files lazily as that walk enters each directory instead of pre-scanning the tree
 - kept deterministic output by collecting results concurrently and sorting only after the full scan completes
 - added deterministic-order tests that run the same scan repeatedly under concurrent execution
 - added benchmark coverage for the checked-in fixture repo and a larger synthetic repo shape

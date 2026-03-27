@@ -325,6 +325,49 @@ func TestScanDirectoryCreatesOneCounterPerWorker(t *testing.T) {
 	}
 }
 
+func TestNewIgnoreMatcherLoadsNestedGitIgnoresLazily(t *testing.T) {
+	t.Parallel()
+
+	root := tempRepo(t)
+	nestedDir := filepath.Join(root, "nested")
+	if err := os.MkdirAll(nestedDir, 0o755); err != nil {
+		t.Fatalf("mkdir nested dir: %v", err)
+	}
+
+	writeFile(t, filepath.Join(root, ".gitignore"), []byte("debug.tmp\n"))
+	writeFile(t, filepath.Join(nestedDir, ".gitignore"), []byte("local.log\n"))
+
+	matcher, err := newIgnoreMatcher(root, true)
+	if err != nil {
+		t.Fatalf("newIgnoreMatcher returned error: %v", err)
+	}
+
+	rootIgnorePath := filepath.Join(root, ".gitignore")
+	nestedIgnorePath := filepath.Join(nestedDir, ".gitignore")
+	if _, ok := matcher.loaded[rootIgnorePath]; !ok {
+		t.Fatalf("expected root .gitignore to be loaded eagerly")
+	}
+	if _, ok := matcher.loaded[nestedIgnorePath]; ok {
+		t.Fatalf("expected nested .gitignore to load lazily")
+	}
+
+	nestedFilePath := filepath.Join(nestedDir, "local.log")
+	if matcher.shouldIgnore(nestedFilePath, false) {
+		t.Fatalf("expected nested rule to be inactive before directory entry")
+	}
+
+	if err := matcher.prepareForDir(nestedDir); err != nil {
+		t.Fatalf("prepareForDir returned error: %v", err)
+	}
+
+	if _, ok := matcher.loaded[nestedIgnorePath]; !ok {
+		t.Fatalf("expected nested .gitignore to be loaded after prepareForDir")
+	}
+	if !matcher.shouldIgnore(nestedFilePath, false) {
+		t.Fatalf("expected nested rule to apply after prepareForDir")
+	}
+}
+
 func fixtureParentDir(t *testing.T) string {
 	t.Helper()
 

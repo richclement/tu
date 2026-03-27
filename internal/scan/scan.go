@@ -68,7 +68,7 @@ func BuildReport(cfg Config) (report.ScanReport, error) {
 		Results:          []report.Result{},
 	}
 
-	matcher, err := newIgnoreMatcher(rootAbs, info.IsDir(), respectGitIgnore)
+	matcher, err := newIgnoreMatcher(rootAbs, respectGitIgnore)
 	if err != nil {
 		return report.ScanReport{}, err
 	}
@@ -132,6 +132,12 @@ func scanDirectory(targetAbs string, rootAbs string, recursive bool, matcher *ig
 			}
 
 			return nil
+		}
+
+		if entry.IsDir() && matcher != nil {
+			if err := matcher.prepareForDir(currentPath); err != nil {
+				return err
+			}
 		}
 
 		if currentPath == targetAbs {
@@ -400,7 +406,7 @@ type ignoreRule struct {
 	hasSlash bool
 }
 
-func newIgnoreMatcher(scanRootAbs string, isDir bool, enabled bool) (*ignoreMatcher, error) {
+func newIgnoreMatcher(scanRootAbs string, enabled bool) (*ignoreMatcher, error) {
 	if !enabled {
 		return nil, nil
 	}
@@ -421,33 +427,6 @@ func newIgnoreMatcher(scanRootAbs string, isDir bool, enabled bool) (*ignoreMatc
 		}
 	}
 
-	if !isDir {
-		return matcher, nil
-	}
-
-	err := filepath.WalkDir(scanRootAbs, func(currentPath string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			if entry != nil && entry.IsDir() {
-				return filepath.SkipDir
-			}
-
-			return nil
-		}
-
-		if entry.IsDir() && entry.Name() == ".git" {
-			return filepath.SkipDir
-		}
-
-		if !entry.IsDir() && entry.Name() == ".gitignore" {
-			return matcher.loadFile(currentPath)
-		}
-
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("load .gitignore rules: %w", err)
-	}
-
 	sort.SliceStable(matcher.files, func(i int, j int) bool {
 		if matcher.files[i].depth != matcher.files[j].depth {
 			return matcher.files[i].depth < matcher.files[j].depth
@@ -457,6 +436,10 @@ func newIgnoreMatcher(scanRootAbs string, isDir bool, enabled bool) (*ignoreMatc
 	})
 
 	return matcher, nil
+}
+
+func (matcher *ignoreMatcher) prepareForDir(dirPath string) error {
+	return matcher.loadFile(filepath.Join(dirPath, ".gitignore"))
 }
 
 func (matcher *ignoreMatcher) loadFile(ignorePath string) error {
