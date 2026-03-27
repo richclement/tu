@@ -6,20 +6,20 @@ class Tu < Formula
 
   on_macos do
     if Hardware::CPU.arm?
-      url "https://github.com/richclement/tu/releases/download/v#{version}/tu_0.1.0_darwin_arm64.tar.gz"
+      url "https://github.com/richclement/tu/releases/download/v#{version}/tu_#{version}_darwin_arm64.tar.gz"
       sha256 "2222222222222222222222222222222222222222222222222222222222222222"
     else
-      url "https://github.com/richclement/tu/releases/download/v#{version}/tu_0.1.0_darwin_amd64.tar.gz"
+      url "https://github.com/richclement/tu/releases/download/v#{version}/tu_#{version}_darwin_amd64.tar.gz"
       sha256 "1111111111111111111111111111111111111111111111111111111111111111"
     end
   end
 
   on_linux do
     if Hardware::CPU.arm?
-      url "https://github.com/richclement/tu/releases/download/v#{version}/tu_0.1.0_linux_arm64.tar.gz"
+      url "https://github.com/richclement/tu/releases/download/v#{version}/tu_#{version}_linux_arm64.tar.gz"
       sha256 "4444444444444444444444444444444444444444444444444444444444444444"
     else
-      url "https://github.com/richclement/tu/releases/download/v#{version}/tu_0.1.0_linux_amd64.tar.gz"
+      url "https://github.com/richclement/tu/releases/download/v#{version}/tu_#{version}_linux_amd64.tar.gz"
       sha256 "3333333333333333333333333333333333333333333333333333333333333333"
     end
   end
