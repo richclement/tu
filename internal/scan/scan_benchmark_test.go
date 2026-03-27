@@ -2,10 +2,11 @@ package scan
 
 import (
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/richclement/tu/internal/testfixture"
 )
 
 func BenchmarkBuildReportFixtureRepo(b *testing.B) {
@@ -47,15 +48,10 @@ func BenchmarkBuildReportSyntheticRepo(b *testing.B) {
 func fixtureParentDirForBenchmark(b *testing.B) string {
 	b.Helper()
 
-	sourceRoot, err := filepath.Abs(filepath.Join("testdata", "repo"))
-	if err != nil {
-		b.Fatalf("abs testdata path: %v", err)
-	}
-
 	parent := b.TempDir()
-	destRoot := filepath.Join(parent, "repo")
-	copyTreeForBenchmark(b, sourceRoot, destRoot)
-	mustMakeRepoFiles(b, destRoot)
+	if _, err := testfixture.MaterializeCanonicalRepo(parent); err != nil {
+		b.Fatalf("materialize fixture repo: %v", err)
+	}
 
 	return parent
 }
@@ -79,36 +75,6 @@ func syntheticBenchmarkParentDir(b *testing.B) string {
 
 func benchmarkName(dirIndex int, fileIndex int) string {
 	return fmt.Sprintf("group-%02d-file-%02d", dirIndex, fileIndex)
-}
-
-func copyTreeForBenchmark(b *testing.B, sourceRoot string, destRoot string) {
-	b.Helper()
-
-	err := filepath.WalkDir(sourceRoot, func(currentPath string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-
-		relPath, err := filepath.Rel(sourceRoot, currentPath)
-		if err != nil {
-			return err
-		}
-
-		destPath := filepath.Join(destRoot, relPath)
-		if entry.IsDir() {
-			return os.MkdirAll(destPath, 0o755)
-		}
-
-		contents, err := os.ReadFile(currentPath)
-		if err != nil {
-			return err
-		}
-
-		return os.WriteFile(destPath, contents, 0o600)
-	})
-	if err != nil {
-		b.Fatalf("copy fixture tree: %v", err)
-	}
 }
 
 func mustMakeRepoFiles(b *testing.B, destRoot string) {

@@ -3,11 +3,10 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
-	"io/fs"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/richclement/tu/internal/testfixture"
 )
 
 func TestRunHelp(t *testing.T) {
@@ -133,62 +132,9 @@ func TestRunRuntimeFailure(t *testing.T) {
 func scanFixtureParentDir(t *testing.T) string {
 	t.Helper()
 
-	sourceRoot, err := filepath.Abs(filepath.Join("..", "scan", "testdata", "repo"))
-	if err != nil {
-		t.Fatalf("abs scan fixture dir: %v", err)
-	}
-
 	parent := t.TempDir()
-	destRoot := filepath.Join(parent, "repo")
-	copyFixtureTree(t, sourceRoot, destRoot)
-	if err := os.MkdirAll(filepath.Join(destRoot, ".git"), 0o755); err != nil {
-		t.Fatalf("mkdir .git: %v", err)
+	if _, err := testfixture.MaterializeCanonicalRepo(parent); err != nil {
+		t.Fatalf("materialize fixture repo: %v", err)
 	}
-
-	writeFixtureFile(t, filepath.Join(destRoot, "debug.tmp"), []byte("This file should be ignored when gitignore rules are enabled.\n"))
-	writeFixtureFile(t, filepath.Join(destRoot, "ignored", "secret.txt"), []byte("This ignored file should only appear when --no-gitignore is used.\n"))
-	writeFixtureFile(t, filepath.Join(destRoot, "nested", "local.log"), []byte("This file is ignored by the nested .gitignore rule.\n"))
-
 	return parent
-}
-
-func copyFixtureTree(t *testing.T, sourceRoot string, destRoot string) {
-	t.Helper()
-
-	err := filepath.WalkDir(sourceRoot, func(currentPath string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-
-		relPath, err := filepath.Rel(sourceRoot, currentPath)
-		if err != nil {
-			return err
-		}
-
-		destPath := filepath.Join(destRoot, relPath)
-		if entry.IsDir() {
-			return os.MkdirAll(destPath, 0o755)
-		}
-
-		contents, err := os.ReadFile(currentPath)
-		if err != nil {
-			return err
-		}
-
-		return os.WriteFile(destPath, contents, 0o600)
-	})
-	if err != nil {
-		t.Fatalf("copy fixture tree: %v", err)
-	}
-}
-
-func writeFixtureFile(t *testing.T, path string, contents []byte) {
-	t.Helper()
-
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatalf("mkdir %s: %v", path, err)
-	}
-	if err := os.WriteFile(path, contents, 0o600); err != nil {
-		t.Fatalf("write %s: %v", path, err)
-	}
 }

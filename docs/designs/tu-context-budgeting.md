@@ -125,15 +125,32 @@ Current runtime behavior after Slice 5:
 - final JSON, plain, and human ordering remains deterministic
 - benchmark targets exist for future threshold and worker-count tuning without changing the user-facing contract
 
+### Slice 6 Completed
+
+Delivered:
+
+- added a push and pull-request GitHub Actions test workflow
+- added a tagged GitHub Actions release workflow with a cross-build OS/arch matrix
+- added a reusable binary-verification path that compares a built `tu` binary against a same-version reference build on canonical fixtures
+- gated release publishing on both quality checks and binary verification before attaching assets
+- added checksum generation for published release archives
+
+Current runtime behavior after Slice 6:
+
+- pushes and pull requests run `go test ./...` and `go vet ./...` in CI
+- tags matching `v*` build release archives for `darwin`, `linux`, and `windows` across `amd64` and `arm64`
+- release publishing now waits for native binary verification against the canonical fixture corpus
+- GitHub Release assets are published idempotently and can be updated safely on re-runs
+
 ### Next Slice
 
-Pick up at Milestone 6.
+The planned v1 implementation is complete.
 
 Do next:
 
-- add the GitHub Actions test workflow
-- add the tagged release workflow and cross-build matrix
-- verify built binaries against the fixture corpus before publishing release assets
+- run pre-landing review on the current branch
+- ship once the branch is clean
+- start post-v1 work from [TODOS.md](/Users/rich/Projects/tu/TODOS.md) instead of expanding the v1 scope in place
 
 Do not change the JSON or plain-text contract casually while building scan logic. Extend the scan pipeline to fit the existing report types and golden tests.
 
