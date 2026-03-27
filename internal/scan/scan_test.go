@@ -5,8 +5,10 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sync/atomic"
 	"testing"
 
+	"github.com/richclement/tu/internal/count"
 	reportpkg "github.com/richclement/tu/internal/report"
 )
 
@@ -276,6 +278,50 @@ func TestBuildReportDeterministicUnderConcurrency(t *testing.T) {
 		if !slices.EqualFunc(baseline, report.Results, sameResult) {
 			t.Fatalf("expected deterministic results\nbaseline: %+v\ncurrent: %+v", baseline, report.Results)
 		}
+	}
+}
+
+func TestScanSingleFileCreatesOneCounter(t *testing.T) {
+	t.Parallel()
+
+	parent := fixtureParentDir(t)
+	rootAbs := filepath.Join(parent, "repo")
+	fileAbs := filepath.Join(rootAbs, "README.md")
+
+	var factoryCalls atomic.Int32
+	result := scanSingleFile(fileAbs, rootAbs, func() *count.Counter {
+		factoryCalls.Add(1)
+		return count.NewCounter()
+	})
+
+	if factoryCalls.Load() != 1 {
+		t.Fatalf("expected one counter creation for single-file scan, got %d", factoryCalls.Load())
+	}
+	if result.Status != reportpkg.StatusCounted {
+		t.Fatalf("expected counted result, got %+v", result)
+	}
+}
+
+func TestScanDirectoryCreatesOneCounterPerWorker(t *testing.T) {
+	t.Parallel()
+
+	parent := fixtureParentDir(t)
+	rootAbs := filepath.Join(parent, "repo")
+
+	var factoryCalls atomic.Int32
+	results, err := scanDirectory(rootAbs, rootAbs, true, nil, func() *count.Counter {
+		factoryCalls.Add(1)
+		return count.NewCounter()
+	})
+	if err != nil {
+		t.Fatalf("scanDirectory returned error: %v", err)
+	}
+
+	if factoryCalls.Load() != int32(defaultWorkerCount()) {
+		t.Fatalf("expected %d counter creations for worker pool, got %d", defaultWorkerCount(), factoryCalls.Load())
+	}
+	if len(results) == 0 {
+		t.Fatal("expected scanDirectory to return results")
 	}
 }
 

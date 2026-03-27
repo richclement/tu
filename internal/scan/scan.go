@@ -30,6 +30,8 @@ type Config struct {
 	Sort             string
 }
 
+type counterFactory func() *count.Counter
+
 func BuildReport(cfg Config) (report.ScanReport, error) {
 	targetArg := cfg.Target
 	if targetArg == "" {
@@ -71,15 +73,13 @@ func BuildReport(cfg Config) (report.ScanReport, error) {
 		return report.ScanReport{}, err
 	}
 
-	counter := count.NewCounter()
-
 	if info.IsDir() {
-		scanReport.Results, err = scanDirectory(targetAbs, rootAbs, recursive, matcher)
+		scanReport.Results, err = scanDirectory(targetAbs, rootAbs, recursive, matcher, count.NewCounter)
 		if err != nil {
 			return report.ScanReport{}, err
 		}
 	} else {
-		result := scanFile(targetAbs, rootAbs, counter)
+		result := scanSingleFile(targetAbs, rootAbs, count.NewCounter)
 		scanReport.Results = append(scanReport.Results, result)
 	}
 
@@ -89,7 +89,7 @@ func BuildReport(cfg Config) (report.ScanReport, error) {
 	return scanReport, nil
 }
 
-func scanDirectory(targetAbs string, rootAbs string, recursive bool, matcher *ignoreMatcher) ([]report.Result, error) {
+func scanDirectory(targetAbs string, rootAbs string, recursive bool, matcher *ignoreMatcher, newCounter counterFactory) ([]report.Result, error) {
 	results := make([]report.Result, 0)
 	resultCh := make(chan report.Result, defaultWorkerCount()*2)
 	tasks := make(chan string, defaultWorkerCount()*2)
@@ -112,7 +112,7 @@ func scanDirectory(targetAbs string, rootAbs string, recursive bool, matcher *ig
 		go func() {
 			defer workerWG.Done()
 
-			workerCounter := count.NewCounter()
+			workerCounter := newCounter()
 
 			for taskPath := range tasks {
 				resultCh <- scanFile(taskPath, rootAbs, workerCounter)
@@ -171,6 +171,10 @@ func scanDirectory(targetAbs string, rootAbs string, recursive bool, matcher *ig
 	}
 
 	return results, nil
+}
+
+func scanSingleFile(absPath string, rootAbs string, newCounter counterFactory) report.Result {
+	return scanFile(absPath, rootAbs, newCounter())
 }
 
 func defaultWorkerCount() int {
