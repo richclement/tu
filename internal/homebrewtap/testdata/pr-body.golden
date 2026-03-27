@@ -1,0 +1,12 @@
+## Homebrew update for tu
+
+- Release: [v0.1.0](https://github.com/richclement/tu/releases/tag/v0.1.0)
+- Formula: `Formula/tu.rb`
+- Version bump: `0.1.0`
+
+| Platform | Asset | SHA256 |
+| --- | --- | --- |
+| macOS amd64 | `tu_0.1.0_darwin_amd64.tar.gz` | `1111111111111111111111111111111111111111111111111111111111111111` |
+| macOS arm64 | `tu_0.1.0_darwin_arm64.tar.gz` | `2222222222222222222222222222222222222222222222222222222222222222` |
+| Linux amd64 | `tu_0.1.0_linux_amd64.tar.gz` | `3333333333333333333333333333333333333333333333333333333333333333` |
+| Linux arm64 | `tu_0.1.0_linux_arm64.tar.gz` | `4444444444444444444444444444444444444444444444444444444444444444` |
