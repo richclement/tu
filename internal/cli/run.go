@@ -46,7 +46,8 @@ func runWithCWD(args []string, stdout io.Writer, stderr io.Writer, version strin
 	scanReport, err := scan.BuildReport(scan.Config{
 		CWD:              cwd,
 		Target:           opts.Path,
-		Recursive:        !opts.NonRecursive,
+		MaxDepth:         opts.Depth,
+		Summarize:        opts.Summarize,
 		RespectGitIgnore: !opts.NoGitIgnore,
 		Sort:             string(opts.Sort),
 	})

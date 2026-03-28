@@ -121,6 +121,9 @@ func TestRunJSONOutput(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected result object at index %d, got %T", index, raw)
 		}
+		if result["kind"] == nil {
+			t.Fatalf("expected result[%d] kind to be present, got %v", index, result)
+		}
 		if _, ok := result["bytes"]; ok {
 			t.Fatalf("expected result[%d] bytes to be absent, got %v", index, result)
 		}
@@ -192,8 +195,31 @@ func TestRunCSVOutput(t *testing.T) {
 	if len(lines) < 2 {
 		t.Fatalf("expected csv header plus rows, got %q", stdout.String())
 	}
-	if lines[0] != "path,tokens,method,provider,status,reason" {
+	if lines[0] != "kind,path,tokens,method,provider,status,reason" {
 		t.Fatalf("unexpected csv header %q", lines[0])
+	}
+}
+
+func TestRunSummarizeHumanOutput(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := runWithCWD([]string{"repo", "--summarize"}, &stdout, &stderr, "dev", scanFixtureParentDir(t))
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected human header plus one summary row, got %q", stdout.String())
+	}
+	if !strings.Contains(lines[1], "repo") {
+		t.Fatalf("expected summary row path in human output, got %q", lines[1])
+	}
+	if !strings.Contains(stderr.String(), "files counted:") {
+		t.Fatalf("expected stderr summary, got %q", stderr.String())
 	}
 }
 
@@ -311,7 +337,7 @@ func TestRunWritesCSVToFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read output file: %v", err)
 	}
-	if !strings.HasPrefix(string(contents), "path,tokens,method,provider,status,reason\n") {
+	if !strings.HasPrefix(string(contents), "kind,path,tokens,method,provider,status,reason\n") {
 		t.Fatalf("expected csv header in file, got %q", string(contents))
 	}
 }

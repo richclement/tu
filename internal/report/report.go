@@ -2,6 +2,13 @@ package report
 
 const SchemaVersionV1 = "v1"
 
+type ResultKind string
+
+const (
+	ResultKindFile    ResultKind = "file"
+	ResultKindSummary ResultKind = "summary"
+)
+
 type Status string
 
 const (
@@ -24,12 +31,13 @@ type Summary struct {
 }
 
 type Result struct {
-	Path     string  `json:"path"`
-	Tokens   *int64  `json:"tokens"`
-	Method   *Method `json:"method"`
-	Provider *string `json:"provider"`
-	Status   Status  `json:"status"`
-	Reason   *string `json:"reason"`
+	Kind     ResultKind `json:"kind"`
+	Path     string     `json:"path"`
+	Tokens   *int64     `json:"tokens"`
+	Method   *Method    `json:"method"`
+	Provider *string    `json:"provider"`
+	Status   Status     `json:"status"`
+	Reason   *string    `json:"reason"`
 }
 
 type ScanReport struct {

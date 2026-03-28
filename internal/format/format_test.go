@@ -71,7 +71,7 @@ func TestCSVEmptyResultsIncludesHeader(t *testing.T) {
 		t.Fatalf("CSV returned error: %v", err)
 	}
 
-	want := "path,tokens,method,provider,status,reason\n"
+	want := "kind,path,tokens,method,provider,status,reason\n"
 	if string(got) != want {
 		t.Fatalf("expected header-only csv output, got %q", got)
 	}
@@ -135,6 +135,7 @@ func TestCSVEscapesUnsafeCharacters(t *testing.T) {
 	got, err := CSV(report.ScanReport{
 		Results: []report.Result{
 			{
+				Kind:     report.ResultKindFile,
 				Path:     "dir/with,break\"name.txt",
 				Tokens:   &tokens,
 				Method:   &method,
@@ -148,7 +149,7 @@ func TestCSVEscapesUnsafeCharacters(t *testing.T) {
 		t.Fatalf("CSV returned error: %v", err)
 	}
 
-	want := "path,tokens,method,provider,status,reason\n\"dir/with,break\"\"name.txt\",7,heuristic,\"local,quoted\",skipped,\"line one\nline two\"\n"
+	want := "kind,path,tokens,method,provider,status,reason\nfile,\"dir/with,break\"\"name.txt\",7,heuristic,\"local,quoted\",skipped,\"line one\nline two\"\n"
 	if string(got) != want {
 		t.Fatalf("csv output mismatch\nwant:\n%s\ngot:\n%s", want, got)
 	}
@@ -160,6 +161,7 @@ func TestCSVFormatsNilFieldsAsEmpty(t *testing.T) {
 	got, err := CSV(report.ScanReport{
 		Results: []report.Result{
 			{
+				Kind:   report.ResultKindFile,
 				Path:   "assets/logo.png",
 				Status: report.StatusSkipped,
 			},
@@ -169,7 +171,7 @@ func TestCSVFormatsNilFieldsAsEmpty(t *testing.T) {
 		t.Fatalf("CSV returned error: %v", err)
 	}
 
-	want := "path,tokens,method,provider,status,reason\nassets/logo.png,,,,skipped,\n"
+	want := "kind,path,tokens,method,provider,status,reason\nfile,assets/logo.png,,,,skipped,\n"
 	if string(got) != want {
 		t.Fatalf("expected empty csv fields for nil values, got %q", got)
 	}
@@ -208,6 +210,7 @@ func sampleReport() report.ScanReport {
 		},
 		Results: []report.Result{
 			{
+				Kind:     report.ResultKindFile,
 				Path:     "README.md",
 				Tokens:   &countedTokens,
 				Method:   &countedMethod,
@@ -216,6 +219,7 @@ func sampleReport() report.ScanReport {
 				Reason:   nil,
 			},
 			{
+				Kind:     report.ResultKindFile,
 				Path:     "assets/logo.png",
 				Tokens:   nil,
 				Method:   nil,

@@ -79,7 +79,7 @@ Current runtime behavior after Slice 2:
 Delivered:
 
 - added `internal/scan` with file and directory targeting
-- implemented recursive walking plus `--non-recursive`
+- implemented recursive walking plus depth-based traversal controls
 - implemented repo-aware `.gitignore` handling, including nested `.gitignore` files under the scan root
 - classified skipped files as `binary`, `decode-failed`, `permission-denied`, or `unreadable`
 - wired the CLI to emit real human, JSON, and plain outputs from populated `ScanReport` values
@@ -260,7 +260,7 @@ No subcommands in v1.
 Usage:
 
 ```text
-tu [path] [--format <human|json|plain|csv>] [--file <path|-] [--sort <mode>] [--non-recursive] [--no-gitignore]
+tu [path] [--format <human|json|plain|csv>] [--file <path|-] [--sort <mode>] [--depth <n>] [--summarize] [--no-gitignore]
 tu --help
 tu --version
 ```
@@ -287,7 +287,8 @@ Reject:
 | `--format` | string | `human` | One of `human`, `json`, `plain`, `csv` |
 | `--file` | string | `""` | Write primary output to a file path, or `-` for stdout |
 | `--sort` | string | `tokens-desc` | One of `tokens-desc`, `tokens-asc`, `path-asc`, `path-desc` |
-| `--non-recursive` | bool | `false` | Do not descend into child directories |
+| `-d`, `--depth` | int | unset | Limit file results by relative depth; use `0` for a summary row and `1` for top-level files only |
+| `-s`, `--summarize` | bool | `false` | Alias for `--depth 0` |
 | `--no-gitignore` | bool | `false` | Include files that `.gitignore` would exclude |
 | `-q`, `--quiet` | bool | `false` | Suppress non-essential stderr messages |
 
@@ -297,7 +298,8 @@ Semantics:
 - `--file` changes only the primary output destination.
 - `--sort` applies to file and directory targets, even when the result set has one item.
 - `.gitignore` applies only when the target is inside a repo with ignore rules available.
-- `--non-recursive` only changes directory traversal behavior.
+- `--depth` applies only to directory targets; file targets still emit one file result.
+- `--summarize` is equivalent to `--depth 0`.
 - v1 does not read from stdin.
 - v1 does not support config files or custom environment-variable configuration.
 
@@ -502,9 +504,9 @@ Notes:
 Suggested format:
 
 ```text
-path,tokens,method,provider,status,reason
-README.md,321,exact,openai,counted,
-assets/logo.png,,,,skipped,binary
+kind,path,tokens,method,provider,status,reason
+file,README.md,321,exact,openai,counted,
+file,assets/logo.png,,,,skipped,binary
 ```
 
 Rules:

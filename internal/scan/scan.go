@@ -27,7 +27,8 @@ const (
 type Config struct {
 	CWD              string
 	Target           string
-	Recursive        bool
+	MaxDepth         *int
+	Summarize        bool
 	RespectGitIgnore bool
 	Sort             string
 }
@@ -53,7 +54,8 @@ func BuildReport(cfg Config) (report.ScanReport, error) {
 
 	rootAbs := targetAbs
 	rootDisplay := normalizeRoot(targetArg, info.IsDir())
-	recursive := cfg.Recursive && info.IsDir()
+	maxDepth := normalizeMaxDepth(cfg.MaxDepth, cfg.Summarize)
+	recursive := shouldReportRecursive(info.IsDir(), maxDepth)
 	respectGitIgnore := cfg.RespectGitIgnore && info.IsDir()
 	if !info.IsDir() {
 		rootAbs = filepath.Dir(targetAbs)
@@ -76,7 +78,7 @@ func BuildReport(cfg Config) (report.ScanReport, error) {
 	}
 
 	if info.IsDir() {
-		scanReport.Results, err = scanDirectory(targetAbs, rootAbs, recursive, matcher, count.NewCounter)
+		scanReport.Results, err = scanDirectory(targetAbs, rootAbs, maxDepth, matcher, count.NewCounter)
 		if err != nil {
 			return report.ScanReport{}, err
 		}
@@ -85,13 +87,17 @@ func BuildReport(cfg Config) (report.ScanReport, error) {
 		scanReport.Results = append(scanReport.Results, result)
 	}
 
-	sortResults(scanReport.Results, cfg.Sort)
 	scanReport.Summary = summarize(scanReport.Results)
+	if isSummaryOnly(maxDepth) && info.IsDir() {
+		scanReport.Results = []report.Result{summaryResult(rootDisplay, scanReport.Summary.TotalTokens)}
+	} else {
+		sortResults(scanReport.Results, cfg.Sort)
+	}
 
 	return scanReport, nil
 }
 
-func scanDirectory(targetAbs string, rootAbs string, recursive bool, matcher *ignoreMatcher, newCounter counterFactory) ([]report.Result, error) {
+func scanDirectory(targetAbs string, rootAbs string, maxDepth *int, matcher *ignoreMatcher, newCounter counterFactory) ([]report.Result, error) {
 	results := make([]report.Result, 0)
 	resultCh := make(chan report.Result, defaultWorkerCount()*2)
 	tasks := make(chan string, defaultWorkerCount()*2)
@@ -155,7 +161,7 @@ func scanDirectory(targetAbs string, rootAbs string, recursive bool, matcher *ig
 				return filepath.SkipDir
 			}
 
-			if !recursive {
+			if shouldSkipDirAtDepth(currentPath, targetAbs, maxDepth) {
 				return filepath.SkipDir
 			}
 
@@ -163,6 +169,9 @@ func scanDirectory(targetAbs string, rootAbs string, recursive bool, matcher *ig
 		}
 
 		if matcher != nil && matcher.shouldIgnore(currentPath, false) {
+			return nil
+		}
+		if shouldSkipFileAtDepth(currentPath, rootAbs, maxDepth) {
 			return nil
 		}
 
@@ -228,6 +237,7 @@ func scanFile(absPath string, rootAbs string, counter *count.Counter) report.Res
 	provider := counted.Provider
 
 	return report.Result{
+		Kind:     report.ResultKindFile,
 		Path:     displayPath,
 		Tokens:   &tokens,
 		Method:   &method,
@@ -341,9 +351,70 @@ func skippedFromError(displayPath string, err error) report.Result {
 
 func skippedResult(displayPath string, reason string) report.Result {
 	return report.Result{
+		Kind:   report.ResultKindFile,
 		Path:   displayPath,
 		Status: report.StatusSkipped,
 		Reason: &reason,
+	}
+}
+
+func normalizeMaxDepth(maxDepth *int, summarize bool) *int {
+	if summarize && maxDepth == nil {
+		depth := 0
+		return &depth
+	}
+
+	return maxDepth
+}
+
+func shouldReportRecursive(isDir bool, maxDepth *int) bool {
+	if !isDir {
+		return false
+	}
+	if maxDepth == nil {
+		return true
+	}
+	if *maxDepth == 0 {
+		return true
+	}
+
+	return *maxDepth > 1
+}
+
+func isSummaryOnly(maxDepth *int) bool {
+	return maxDepth != nil && *maxDepth == 0
+}
+
+func shouldSkipDirAtDepth(currentPath string, targetAbs string, maxDepth *int) bool {
+	if maxDepth == nil || *maxDepth == 0 {
+		return false
+	}
+
+	return relativeDepth(relativePath(targetAbs, currentPath)) >= *maxDepth
+}
+
+func shouldSkipFileAtDepth(currentPath string, rootAbs string, maxDepth *int) bool {
+	if maxDepth == nil || *maxDepth == 0 {
+		return false
+	}
+
+	return relativeDepth(relativePath(rootAbs, currentPath)) > *maxDepth
+}
+
+func relativeDepth(relPath string) int {
+	if relPath == "" || relPath == "." {
+		return 0
+	}
+
+	return strings.Count(relPath, "/") + 1
+}
+
+func summaryResult(path string, totalTokens int64) report.Result {
+	return report.Result{
+		Kind:   report.ResultKindSummary,
+		Path:   path,
+		Tokens: &totalTokens,
+		Status: report.StatusCounted,
 	}
 }
 
