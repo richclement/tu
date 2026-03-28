@@ -3,6 +3,8 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -51,12 +53,27 @@ func TestRunInvalidUsage(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	exitCode := Run([]string{"--json", "--plain"}, &stdout, &stderr, "dev")
+	exitCode := Run([]string{"--format", "bogus"}, &stdout, &stderr, "dev")
 	if exitCode != 2 {
 		t.Fatalf("expected exit code 2, got %d", exitCode)
 	}
 	if stdout.Len() != 0 {
 		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "Run `tu --help` for usage.") {
+		t.Fatalf("expected help hint in stderr, got %q", stderr.String())
+	}
+}
+
+func TestRunLegacyFlagUsageError(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := Run([]string{"--json"}, &stdout, &stderr, "dev")
+	if exitCode != 2 {
+		t.Fatalf("expected exit code 2, got %d", exitCode)
 	}
 	if !strings.Contains(stderr.String(), "Run `tu --help` for usage.") {
 		t.Fatalf("expected help hint in stderr, got %q", stderr.String())
@@ -70,7 +87,7 @@ func TestRunJSONOutput(t *testing.T) {
 	var stderr bytes.Buffer
 
 	exitCode := runWithCWD(
-		[]string{"repo", "--json", "--quiet"},
+		[]string{"repo", "--format", "json", "--quiet"},
 		&stdout,
 		&stderr,
 		"dev",
@@ -120,7 +137,7 @@ func TestRunPlainOutput(t *testing.T) {
 	var stderr bytes.Buffer
 
 	exitCode := runWithCWD(
-		[]string{"repo", "--plain", "--quiet"},
+		[]string{"repo", "--format", "plain", "--quiet"},
 		&stdout,
 		&stderr,
 		"dev",
@@ -151,6 +168,35 @@ func TestRunPlainOutput(t *testing.T) {
 	}
 }
 
+func TestRunCSVOutput(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := runWithCWD(
+		[]string{"repo", "--format", "csv", "--quiet"},
+		&stdout,
+		&stderr,
+		"dev",
+		scanFixtureParentDir(t),
+	)
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr in quiet csv mode, got %q", stderr.String())
+	}
+
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("expected csv header plus rows, got %q", stdout.String())
+	}
+	if lines[0] != "path,tokens,method,provider,status,reason" {
+		t.Fatalf("unexpected csv header %q", lines[0])
+	}
+}
+
 func TestRunHumanOutput(t *testing.T) {
 	t.Parallel()
 
@@ -172,6 +218,144 @@ func TestRunHumanOutput(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "files counted:") {
 		t.Fatalf("expected human summary on stderr, got %q", stderr.String())
+	}
+}
+
+func TestRunWritesJSONToFile(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	outputPath := filepath.Join(t.TempDir(), "report.json")
+
+	exitCode := runWithCWD(
+		[]string{"repo", "--format", "json", "--file", outputPath, "--quiet"},
+		&stdout,
+		&stderr,
+		"dev",
+		scanFixtureParentDir(t),
+	)
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	}
+
+	contents, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read output file: %v", err)
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal(contents, &decoded); err != nil {
+		t.Fatalf("unmarshal json output file: %v", err)
+	}
+}
+
+func TestRunWritesHumanToFile(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	outputPath := filepath.Join(t.TempDir(), "report.txt")
+
+	exitCode := runWithCWD(
+		[]string{"repo", "--format", "human", "--file", outputPath},
+		&stdout,
+		&stderr,
+		"dev",
+		scanFixtureParentDir(t),
+	)
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	}
+
+	contents, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read output file: %v", err)
+	}
+	if !strings.Contains(string(contents), "TOKENS") {
+		t.Fatalf("expected human output in file, got %q", string(contents))
+	}
+	if !strings.Contains(stderr.String(), "files counted:") {
+		t.Fatalf("expected human summary on stderr, got %q", stderr.String())
+	}
+}
+
+func TestRunWritesCSVToFile(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	outputPath := filepath.Join(t.TempDir(), "report.csv")
+
+	exitCode := runWithCWD(
+		[]string{"repo", "--format", "csv", "--file", outputPath, "--quiet"},
+		&stdout,
+		&stderr,
+		"dev",
+		scanFixtureParentDir(t),
+	)
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	}
+
+	contents, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read output file: %v", err)
+	}
+	if !strings.HasPrefix(string(contents), "path,tokens,method,provider,status,reason\n") {
+		t.Fatalf("expected csv header in file, got %q", string(contents))
+	}
+}
+
+func TestRunFileDashWritesToStdout(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := runWithCWD(
+		[]string{"repo", "--format", "json", "--file", "-", "--quiet"},
+		&stdout,
+		&stderr,
+		"dev",
+		scanFixtureParentDir(t),
+	)
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+	if stdout.Len() == 0 {
+		t.Fatal("expected stdout output when --file=- is used")
+	}
+}
+
+func TestRunOutputFilePathFailure(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	outputPath := filepath.Join(t.TempDir(), "missing", "report.json")
+
+	exitCode := runWithCWD(
+		[]string{"repo", "--format", "json", "--file", outputPath},
+		&stdout,
+		&stderr,
+		"dev",
+		scanFixtureParentDir(t),
+	)
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", exitCode)
+	}
+	if !strings.Contains(stderr.String(), "open output file") {
+		t.Fatalf("expected output file error, got %q", stderr.String())
 	}
 }
 

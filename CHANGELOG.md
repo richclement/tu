@@ -2,19 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.1.2.0] - 2026-03-27
+## [Unreleased]
+
+### Added
+
+- Added `--format csv` output with deterministic headered rows and `--file` support for writing reports to disk.
 
 ### Changed
 
+- Replaced the old `--json` and `--plain` flags with a canonical `--format <human|json|plain|csv>` interface.
+- Made `--file <path|->` a generic output destination override for all formats, including human output.
+- Updated release verification, documentation, and formatter coverage to match the new output contract.
 - Removed per-file byte-size fields and `summary.total_bytes` from human, `--json`, and `--plain` output so the tool stays focused on token budgeting.
 
-## [0.1.1.1] - 2026-03-27
+### Removed
+
+- Removed the legacy `--json`, `--plain`, and dead `--no-color` flags from the CLI surface.
+
+## [0.1.1] - 2026-03-27
 
 ### Changed
 
 - Pinned the GitHub Actions test and release workflows to immutable SHAs and upgraded `actions/checkout`, `actions/setup-go`, `actions/upload-artifact`, `actions/download-artifact`, and `peter-evans/create-pull-request` to Node 24 compatible releases.
 
-## [0.1.0.0] - 2026-03-26
+## [0.1.0] - 2026-03-26
 
 ### Added
 

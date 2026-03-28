@@ -24,7 +24,7 @@ func TestParseOptionsDefaults(t *testing.T) {
 func TestParseOptionsWithPathAndFlags(t *testing.T) {
 	t.Parallel()
 
-	opts, err := ParseOptions([]string{"docs", "--plain", "--sort", "path-asc", "--non-recursive", "--no-gitignore", "-q", "--no-color"})
+	opts, err := ParseOptions([]string{"docs", "--format", "plain", "--file", "report.txt", "--sort", "path-asc", "--non-recursive", "--no-gitignore", "-q"})
 	if err != nil {
 		t.Fatalf("ParseOptions returned error: %v", err)
 	}
@@ -34,6 +34,9 @@ func TestParseOptionsWithPathAndFlags(t *testing.T) {
 	}
 	if opts.Output != OutputPlain {
 		t.Fatalf("expected plain output, got %q", opts.Output)
+	}
+	if opts.File != "report.txt" {
+		t.Fatalf("expected file report.txt, got %q", opts.File)
 	}
 	if opts.Sort != SortPathAsc {
 		t.Fatalf("expected sort %q, got %q", SortPathAsc, opts.Sort)
@@ -47,15 +50,12 @@ func TestParseOptionsWithPathAndFlags(t *testing.T) {
 	if !opts.Quiet {
 		t.Fatal("expected quiet to be true")
 	}
-	if !opts.NoColor {
-		t.Fatal("expected no-color to be true")
-	}
 }
 
 func TestParseOptionsWithPathAfterFlags(t *testing.T) {
 	t.Parallel()
 
-	opts, err := ParseOptions([]string{"--json", "--sort=path-desc", "docs"})
+	opts, err := ParseOptions([]string{"--format=json", "--sort=path-desc", "docs"})
 	if err != nil {
 		t.Fatalf("ParseOptions returned error: %v", err)
 	}
@@ -68,6 +68,22 @@ func TestParseOptionsWithPathAfterFlags(t *testing.T) {
 	}
 	if opts.Sort != SortPathDesc {
 		t.Fatalf("expected sort %q, got %q", SortPathDesc, opts.Sort)
+	}
+}
+
+func TestParseOptionsSupportsCSVAndStdoutFileShortcut(t *testing.T) {
+	t.Parallel()
+
+	opts, err := ParseOptions([]string{"--format=csv", "--file=-"})
+	if err != nil {
+		t.Fatalf("ParseOptions returned error: %v", err)
+	}
+
+	if opts.Output != OutputCSV {
+		t.Fatalf("expected csv output, got %q", opts.Output)
+	}
+	if opts.File != "-" {
+		t.Fatalf("expected file '-', got %q", opts.File)
 	}
 }
 
@@ -104,11 +120,35 @@ func TestParseOptionsHelpAndVersion(t *testing.T) {
 	}
 }
 
-func TestParseOptionsRejectsConflictingOutputModes(t *testing.T) {
+func TestParseOptionsRejectsLegacyJSONFlag(t *testing.T) {
 	t.Parallel()
 
-	if _, err := ParseOptions([]string{"--json", "--plain"}); err == nil {
-		t.Fatal("expected conflict error, got nil")
+	if _, err := ParseOptions([]string{"--json"}); err == nil {
+		t.Fatal("expected legacy flag error, got nil")
+	}
+}
+
+func TestParseOptionsRejectsLegacyPlainFlag(t *testing.T) {
+	t.Parallel()
+
+	if _, err := ParseOptions([]string{"--plain"}); err == nil {
+		t.Fatal("expected legacy flag error, got nil")
+	}
+}
+
+func TestParseOptionsRejectsLegacyNoColorFlag(t *testing.T) {
+	t.Parallel()
+
+	if _, err := ParseOptions([]string{"--no-color"}); err == nil {
+		t.Fatal("expected legacy flag error, got nil")
+	}
+}
+
+func TestParseOptionsRejectsInvalidFormat(t *testing.T) {
+	t.Parallel()
+
+	if _, err := ParseOptions([]string{"--format", "bogus"}); err == nil {
+		t.Fatal("expected invalid format error, got nil")
 	}
 }
 
@@ -125,6 +165,22 @@ func TestParseOptionsRejectsMissingSortValue(t *testing.T) {
 
 	if _, err := ParseOptions([]string{"--sort"}); err == nil {
 		t.Fatal("expected missing sort value error, got nil")
+	}
+}
+
+func TestParseOptionsRejectsMissingFormatValue(t *testing.T) {
+	t.Parallel()
+
+	if _, err := ParseOptions([]string{"--format"}); err == nil {
+		t.Fatal("expected missing format value error, got nil")
+	}
+}
+
+func TestParseOptionsRejectsMissingFileValue(t *testing.T) {
+	t.Parallel()
+
+	if _, err := ParseOptions([]string{"--file"}); err == nil {
+		t.Fatal("expected missing file value error, got nil")
 	}
 }
 

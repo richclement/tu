@@ -1,0 +1,3 @@
+path,tokens,method,provider,status,reason
+README.md,321,exact,openai,counted,
+assets/logo.png,,,,skipped,binary
