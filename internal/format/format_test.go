@@ -40,12 +40,40 @@ func TestPlainGolden(t *testing.T) {
 	}
 }
 
+func TestCSVGolden(t *testing.T) {
+	t.Parallel()
+
+	got, err := CSV(sampleReport())
+	if err != nil {
+		t.Fatalf("CSV returned error: %v", err)
+	}
+
+	want := readGoldenFile(t, "report.csv.golden")
+	if string(got) != string(want) {
+		t.Fatalf("csv golden mismatch\nwant:\n%s\ngot:\n%s", want, got)
+	}
+}
+
 func TestPlainEmptyResults(t *testing.T) {
 	t.Parallel()
 
 	got := Plain(report.ScanReport{})
 	if len(got) != 0 {
 		t.Fatalf("expected empty output for empty results, got %q", got)
+	}
+}
+
+func TestCSVEmptyResultsIncludesHeader(t *testing.T) {
+	t.Parallel()
+
+	got, err := CSV(report.ScanReport{})
+	if err != nil {
+		t.Fatalf("CSV returned error: %v", err)
+	}
+
+	want := "path,tokens,method,provider,status,reason\n"
+	if string(got) != want {
+		t.Fatalf("expected header-only csv output, got %q", got)
 	}
 }
 
@@ -94,6 +122,56 @@ func TestPlainEscapesUnsafePathCharacters(t *testing.T) {
 	want := "7\theuristic\tcounted\tdir/with\\tbreak\\nname\\\\file.txt\n"
 	if string(got) != want {
 		t.Fatalf("plain output mismatch\nwant:\n%s\ngot:\n%s", want, got)
+	}
+}
+
+func TestCSVEscapesUnsafeCharacters(t *testing.T) {
+	t.Parallel()
+
+	tokens := int64(7)
+	method := report.MethodHeuristic
+	provider := "local,quoted"
+	reason := "line one\nline two"
+	got, err := CSV(report.ScanReport{
+		Results: []report.Result{
+			{
+				Path:     "dir/with,break\"name.txt",
+				Tokens:   &tokens,
+				Method:   &method,
+				Provider: &provider,
+				Status:   report.StatusSkipped,
+				Reason:   &reason,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CSV returned error: %v", err)
+	}
+
+	want := "path,tokens,method,provider,status,reason\n\"dir/with,break\"\"name.txt\",7,heuristic,\"local,quoted\",skipped,\"line one\nline two\"\n"
+	if string(got) != want {
+		t.Fatalf("csv output mismatch\nwant:\n%s\ngot:\n%s", want, got)
+	}
+}
+
+func TestCSVFormatsNilFieldsAsEmpty(t *testing.T) {
+	t.Parallel()
+
+	got, err := CSV(report.ScanReport{
+		Results: []report.Result{
+			{
+				Path:   "assets/logo.png",
+				Status: report.StatusSkipped,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CSV returned error: %v", err)
+	}
+
+	want := "path,tokens,method,provider,status,reason\nassets/logo.png,,,,skipped,\n"
+	if string(got) != want {
+		t.Fatalf("expected empty csv fields for nil values, got %q", got)
 	}
 }
 

@@ -12,15 +12,17 @@ import (
 )
 
 type commandResult struct {
-	exitCode int
-	stdout   string
-	stderr   string
+	exitCode          int
+	stdout            string
+	stderr            string
+	outputFileContent string
 }
 
 type commandCase struct {
-	name string
-	args []string
-	cwd  string
+	name       string
+	args       []string
+	cwd        string
+	outputFile string
 }
 
 func Verify(binaryPath string, version string) error {
@@ -59,20 +61,22 @@ func Verify(binaryPath string, version string) error {
 	cases := []commandCase{
 		{name: "version", args: []string{"--version"}, cwd: repoRoot},
 		{name: "human-directory", args: []string{"repo"}, cwd: fixtureCWD},
-		{name: "json-directory", args: []string{"repo", "--json", "--quiet"}, cwd: fixtureCWD},
-		{name: "plain-directory", args: []string{"repo", "--plain", "--quiet"}, cwd: fixtureCWD},
-		{name: "json-file", args: []string{filepath.ToSlash(filepath.Join("repo", "nested", "child.txt")), "--json", "--quiet"}, cwd: fixtureCWD},
-		{name: "invalid-usage", args: []string{"--json", "--plain"}, cwd: fixtureCWD},
+		{name: "json-directory", args: []string{"repo", "--format", "json", "--quiet"}, cwd: fixtureCWD},
+		{name: "plain-directory", args: []string{"repo", "--format", "plain", "--quiet"}, cwd: fixtureCWD},
+		{name: "json-file", args: []string{filepath.ToSlash(filepath.Join("repo", "nested", "child.txt")), "--format", "json", "--quiet"}, cwd: fixtureCWD},
+		{name: "csv-file", args: []string{"repo", "--format", "csv", "--file", filepath.Join(tempDir, "report.csv"), "--quiet"}, cwd: fixtureCWD, outputFile: filepath.Join(tempDir, "report.csv")},
+		{name: "invalid-format", args: []string{"--format", "bogus"}, cwd: fixtureCWD},
+		{name: "legacy-flag", args: []string{"--json"}, cwd: fixtureCWD},
 		{name: "runtime-failure", args: []string{"missing.txt"}, cwd: fixtureCWD},
 	}
 
 	for _, currentCase := range cases {
-		expected, err := runCommand(referenceBinary, currentCase.args, currentCase.cwd)
+		expected, err := runCommand(referenceBinary, currentCase.args, currentCase.cwd, currentCase.outputFile)
 		if err != nil {
 			return fmt.Errorf("run reference binary for %s: %w", currentCase.name, err)
 		}
 
-		actual, err := runCommand(binaryAbs, currentCase.args, currentCase.cwd)
+		actual, err := runCommand(binaryAbs, currentCase.args, currentCase.cwd, currentCase.outputFile)
 		if err != nil {
 			return fmt.Errorf("run release binary for %s: %w", currentCase.name, err)
 		}
@@ -104,7 +108,7 @@ func buildReferenceBinary(repoRoot string, outputPath string, version string) er
 	return nil
 }
 
-func runCommand(binary string, args []string, cwd string) (commandResult, error) {
+func runCommand(binary string, args []string, cwd string, outputFile string) (commandResult, error) {
 	cmd := exec.Command(binary, args...)
 	cmd.Dir = cwd
 
@@ -118,6 +122,13 @@ func runCommand(binary string, args []string, cwd string) (commandResult, error)
 		exitCode: 0,
 		stdout:   stdout.String(),
 		stderr:   stderr.String(),
+	}
+	if outputFile != "" && outputFile != "-" {
+		contents, readErr := os.ReadFile(outputFile)
+		if readErr != nil {
+			return commandResult{}, fmt.Errorf("read output file %q: %w", outputFile, readErr)
+		}
+		result.outputFileContent = string(contents)
 	}
 	if err == nil {
 		return result, nil
@@ -141,6 +152,9 @@ func compareResults(name string, expected commandResult, actual commandResult) e
 	}
 	if expected.stderr != actual.stderr {
 		return fmt.Errorf("%s stderr mismatch\nexpected:\n%s\nactual:\n%s", name, expected.stderr, actual.stderr)
+	}
+	if expected.outputFileContent != actual.outputFileContent {
+		return fmt.Errorf("%s output file mismatch\nexpected:\n%s\nactual:\n%s", name, expected.outputFileContent, actual.outputFileContent)
 	}
 
 	return nil

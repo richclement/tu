@@ -5,11 +5,12 @@ CLI for measuring token usage across files and directories. `du` for tokenizatio
 
 ```sh
 tu .
-tu path/to/repo --json --quiet
-tu path/to/file --plain --quiet
+tu path/to/repo --format json --quiet
+tu path/to/file --format plain --quiet
+tu path/to/repo --format csv --file report.csv --quiet
 ```
 
-Default output is a human-readable table on stdout plus summaries or warnings on stderr. Use `--json` or `--plain` for token-focused automation output, `--non-recursive` to stay at the top level, and `--no-gitignore` to include files that ignore rules would normally skip.
+Default output is a human-readable table on stdout plus summaries or warnings on stderr. Use `--format json`, `--format plain`, or `--format csv` for automation-friendly output, and `--file` when you want any format written to a specific path instead of stdout. Use `--non-recursive` to stay at the top level, and `--no-gitignore` to include files that ignore rules would normally skip.
 
 ## Installation
 

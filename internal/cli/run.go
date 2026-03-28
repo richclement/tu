@@ -65,21 +65,47 @@ func runWithCWD(args []string, stdout io.Writer, stderr io.Writer, version strin
 }
 
 func writePrimaryOutput(stdout io.Writer, scanReport report.ScanReport, opts Options) error {
-	switch opts.Output {
-	case OutputJSON:
-		output, err := format.JSON(scanReport)
-		if err != nil {
-			return err
-		}
-		_, err = stdout.Write(output)
-		return err
-	case OutputPlain:
-		_, err := stdout.Write(format.Plain(scanReport))
-		return err
-	default:
-		_, err := stdout.Write(format.Human(scanReport))
+	output, err := renderPrimaryOutput(scanReport, opts)
+	if err != nil {
 		return err
 	}
+
+	writer, closer, err := openOutputWriter(stdout, opts)
+	if err != nil {
+		return err
+	}
+	if closer != nil {
+		defer closer.Close()
+	}
+
+	_, err = writer.Write(output)
+	return err
+}
+
+func renderPrimaryOutput(scanReport report.ScanReport, opts Options) ([]byte, error) {
+	switch opts.Output {
+	case OutputJSON:
+		return format.JSON(scanReport)
+	case OutputPlain:
+		return format.Plain(scanReport), nil
+	case OutputCSV:
+		return format.CSV(scanReport)
+	default:
+		return format.Human(scanReport), nil
+	}
+}
+
+func openOutputWriter(stdout io.Writer, opts Options) (io.Writer, io.Closer, error) {
+	if opts.File == "" || opts.File == "-" {
+		return stdout, nil, nil
+	}
+
+	file, err := os.Create(opts.File)
+	if err != nil {
+		return nil, nil, fmt.Errorf("open output file %q: %w", opts.File, err)
+	}
+
+	return file, file, nil
 }
 
 func writeSummary(stderr io.Writer, scanReport report.ScanReport, opts Options) {

@@ -27,7 +27,7 @@ Ship a boring, offline-first CLI that:
 - respects `.gitignore` by default
 - ranks files by token usage
 - emits human-readable output by default
-- emits deterministic `--json` and `--plain` output for automation
+- emits deterministic `--format json`, `--format plain`, and `--format csv` output for automation
 - uses one exact local tokenizer path plus a heuristic fallback
 - ships installable binaries via GitHub Releases
 
@@ -260,7 +260,7 @@ No subcommands in v1.
 Usage:
 
 ```text
-tu [path] [--json | --plain] [--sort <mode>] [--non-recursive] [--no-gitignore]
+tu [path] [--format <human|json|plain|csv>] [--file <path|-] [--sort <mode>] [--non-recursive] [--no-gitignore]
 tu --help
 tu --version
 ```
@@ -284,17 +284,17 @@ Reject:
 |------|------|---------|---------|
 | `-h`, `--help` | bool | `false` | Show usage and exit |
 | `--version` | bool | `false` | Print version and exit |
-| `--json` | bool | `false` | Emit deterministic JSON to stdout |
-| `--plain` | bool | `false` | Emit stable line-based text to stdout |
+| `--format` | string | `human` | One of `human`, `json`, `plain`, `csv` |
+| `--file` | string | `""` | Write primary output to a file path, or `-` for stdout |
 | `--sort` | string | `tokens-desc` | One of `tokens-desc`, `tokens-asc`, `path-asc`, `path-desc` |
 | `--non-recursive` | bool | `false` | Do not descend into child directories |
 | `--no-gitignore` | bool | `false` | Include files that `.gitignore` would exclude |
 | `-q`, `--quiet` | bool | `false` | Suppress non-essential stderr messages |
-| `--no-color` | bool | `false` | Disable color in human output |
 
 Semantics:
 
-- `--json` and `--plain` are mutually exclusive.
+- `--format` selects exactly one primary output mode.
+- `--file` changes only the primary output destination.
 - `--sort` applies to file and directory targets, even when the result set has one item.
 - `.gitignore` applies only when the target is inside a repo with ignore rules available.
 - `--non-recursive` only changes directory traversal behavior.
@@ -307,8 +307,9 @@ stdout:
 
 - primary result only
 - human table by default
-- full JSON document for `--json`
-- stable line-oriented records for `--plain`
+- full JSON document for `--format json`
+- stable line-oriented records for `--format plain`
+- headered CSV rows for `--format csv`
 
 stderr:
 
@@ -319,8 +320,7 @@ stderr:
 
 TTY behavior:
 
-- color only for interactive human output
-- disable color when `NO_COLOR` is set, `TERM=dumb`, or `--no-color` is passed
+- no color support in v1
 
 ### Exit Codes
 
@@ -334,7 +334,7 @@ Examples:
 
 - missing path: `2`
 - invalid `--sort`: `2`
-- `--json --plain`: `2`
+- unsupported `--format`: `2`
 - unreadable file encountered but scan completes with skipped result: `0`
 - fatal walk failure with no usable result: `1`
 
@@ -345,8 +345,9 @@ To keep tests and automation stable:
 - all output paths are relative to the scan root
 - machine-readable paths use forward slashes
 - sort ties break by `path-asc`
-- `--json` output must not include volatile timestamps
-- `--plain` output must be stable across runs for the same inputs
+- `--format json` output must not include volatile timestamps
+- `--format plain` output must be stable across runs for the same inputs
+- `--format csv` output must be stable across runs for the same inputs
 
 ## Scan Semantics
 
@@ -432,7 +433,7 @@ After the table, print a short stderr summary when relevant:
 
 ### Plain Output
 
-`--plain` is for shell composition. Keep it line-based and boring.
+`--format plain` is for shell composition. Keep it line-based and boring.
 
 Suggested format:
 
@@ -450,7 +451,7 @@ Rules:
 
 ### JSON Output
 
-`--json` is the contract for agents and scripts.
+`--format json` is the contract for agents and scripts.
 
 Schema shape:
 
@@ -493,7 +494,26 @@ Notes:
 
 - `schema_version` starts at `v1`
 - `root` should be the scan root as given to the formatter, not an absolute machine-specific path
-- JSON is the only supported structured format in v1
+
+### CSV Output
+
+`--format csv` is for spreadsheet imports and artifact export.
+
+Suggested format:
+
+```text
+path,tokens,method,provider,status,reason
+README.md,321,exact,openai,counted,
+assets/logo.png,,,,skipped,binary
+```
+
+Rules:
+
+- always include a header row
+- one result per row
+- keep skipped files visible
+- no summary rows or footers
+- empty fields represent missing values
 
 ## Suggested Package Layout
 
@@ -562,7 +582,7 @@ Test layers:
 
 - unit tests for option validation, sort behavior, formatter behavior, and counter selection
 - fixture-based scan tests under `testdata/`
-- golden tests for `--json` and `--plain`
+- golden tests for `--format json`, `--format plain`, and `--format csv`
 - subprocess integration tests for the CLI binary
 - release-workflow verification against canonical fixtures
 
@@ -607,7 +627,7 @@ Package-manager distribution comes later.
 Mitigation:
 
 - version the JSON schema
-- add golden tests for `--json` and `--plain`
+- add golden tests for `--format json`, `--format plain`, and `--format csv`
 
 ### Risk: memory blowups on large files
 

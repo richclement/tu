@@ -14,6 +14,7 @@ const (
 	OutputHuman OutputMode = "human"
 	OutputJSON  OutputMode = "json"
 	OutputPlain OutputMode = "plain"
+	OutputCSV   OutputMode = "csv"
 )
 
 type SortMode string
@@ -33,16 +34,22 @@ var (
 		SortPathAsc:    {},
 		SortPathDesc:   {},
 	}
+	validOutputModes = map[OutputMode]struct{}{
+		OutputHuman: {},
+		OutputJSON:  {},
+		OutputPlain: {},
+		OutputCSV:   {},
+	}
 )
 
 type Options struct {
 	Path         string
 	Output       OutputMode
+	File         string
 	Sort         SortMode
 	NonRecursive bool
 	NoGitIgnore  bool
 	Quiet        bool
-	NoColor      bool
 	ShowHelp     bool
 	ShowVersion  bool
 }
@@ -63,22 +70,20 @@ func ParseOptions(args []string) (Options, error) {
 	fs.SetOutput(io.Discard)
 
 	var (
-		jsonOutput  bool
-		plainOutput bool
+		formatValue string
 		sortValue   string
 	)
 
 	fs.BoolVar(&opts.ShowHelp, "help", false, "")
 	fs.BoolVar(&opts.ShowHelp, "h", false, "")
 	fs.BoolVar(&opts.ShowVersion, "version", false, "")
-	fs.BoolVar(&jsonOutput, "json", false, "")
-	fs.BoolVar(&plainOutput, "plain", false, "")
+	fs.StringVar(&formatValue, "format", string(OutputHuman), "")
+	fs.StringVar(&opts.File, "file", "", "")
 	fs.StringVar(&sortValue, "sort", string(SortTokensDesc), "")
 	fs.BoolVar(&opts.NonRecursive, "non-recursive", false, "")
 	fs.BoolVar(&opts.NoGitIgnore, "no-gitignore", false, "")
 	fs.BoolVar(&opts.Quiet, "quiet", false, "")
 	fs.BoolVar(&opts.Quiet, "q", false, "")
-	fs.BoolVar(&opts.NoColor, "no-color", false, "")
 
 	if err := fs.Parse(normalizedArgs); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -93,17 +98,6 @@ func ParseOptions(args []string) (Options, error) {
 		return opts, nil
 	}
 
-	if jsonOutput && plainOutput {
-		return Options{}, usageError("--json and --plain cannot be used together")
-	}
-
-	if jsonOutput {
-		opts.Output = OutputJSON
-	}
-	if plainOutput {
-		opts.Output = OutputPlain
-	}
-
 	if len(fs.Args()) > 0 {
 		return Options{}, usageError("unexpected positional arguments after flag parsing")
 	}
@@ -116,6 +110,7 @@ func ParseOptions(args []string) (Options, error) {
 	}
 
 	opts.Sort = SortMode(sortValue)
+	opts.Output = OutputMode(formatValue)
 
 	if err := opts.Validate(); err != nil {
 		return Options{}, err
@@ -132,6 +127,9 @@ func (o Options) Validate() error {
 	if _, ok := validSortModes[o.Sort]; !ok {
 		return usageError(fmt.Sprintf("unsupported sort mode %q", o.Sort))
 	}
+	if _, ok := validOutputModes[o.Output]; !ok {
+		return usageError(fmt.Sprintf("unsupported format %q", o.Output))
+	}
 
 	return nil
 }
@@ -141,7 +139,7 @@ func Usage() string {
 tu shows token usage for files so humans and agents can identify context-heavy files quickly.
 
 Usage:
-  tu [path] [--json | --plain] [--sort <mode>] [--non-recursive] [--no-gitignore]
+  tu [path] [--format <human|json|plain|csv>] [--file <path|-] [--sort <mode>] [--non-recursive] [--no-gitignore]
   tu --help
   tu --version
 
@@ -151,13 +149,12 @@ Arguments:
 Options:
   -h, --help           Show usage and exit
       --version        Print version and exit
-      --json           Emit deterministic JSON to stdout
-      --plain          Emit stable line-based text to stdout
+      --format         One of: human, json, plain, csv
+      --file           Write primary output to a file path or "-" for stdout
       --sort           One of: tokens-desc, tokens-asc, path-asc, path-desc
       --non-recursive  Do not descend into child directories
       --no-gitignore   Include files ignored by .gitignore
   -q, --quiet          Suppress non-essential stderr messages
-      --no-color       Disable color in human output
 `)
 }
 
@@ -180,13 +177,15 @@ func normalizeArgs(args []string) ([]string, []string) {
 		case arg == "--":
 			positionalArgs = append(positionalArgs, args[i+1:]...)
 			return flagArgs, positionalArgs
-		case arg == "--sort":
+		case arg == "--sort" || arg == "--format" || arg == "--file":
 			flagArgs = append(flagArgs, arg)
 			if i+1 < len(args) {
 				i++
 				flagArgs = append(flagArgs, args[i])
 			}
-		case strings.HasPrefix(arg, "--sort="):
+		case strings.HasPrefix(arg, "--sort="),
+			strings.HasPrefix(arg, "--format="),
+			strings.HasPrefix(arg, "--file="):
 			flagArgs = append(flagArgs, arg)
 		case strings.HasPrefix(arg, "-") && arg != "-":
 			flagArgs = append(flagArgs, arg)

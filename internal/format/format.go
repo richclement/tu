@@ -2,6 +2,7 @@ package format
 
 import (
 	"bytes"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -44,6 +45,35 @@ func Plain(scanReport report.ScanReport) []byte {
 	return []byte(strings.Join(lines, "\n") + "\n")
 }
 
+func CSV(scanReport report.ScanReport) ([]byte, error) {
+	var buf bytes.Buffer
+
+	writer := csv.NewWriter(&buf)
+	if err := writer.Write([]string{"path", "tokens", "method", "provider", "status", "reason"}); err != nil {
+		return nil, fmt.Errorf("write csv header: %w", err)
+	}
+
+	for _, result := range ensureResults(scanReport.Results) {
+		if err := writer.Write([]string{
+			result.Path,
+			formatNullableInt(result.Tokens),
+			formatNullableMethod(result.Method),
+			formatNullableString(result.Provider),
+			string(result.Status),
+			formatNullableString(result.Reason),
+		}); err != nil {
+			return nil, fmt.Errorf("write csv row: %w", err)
+		}
+	}
+
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		return nil, fmt.Errorf("flush csv report: %w", err)
+	}
+
+	return buf.Bytes(), nil
+}
+
 func ensureResults(results []report.Result) []report.Result {
 	if results == nil {
 		return []report.Result{}
@@ -66,6 +96,14 @@ func formatNullableMethod(value *report.Method) string {
 	}
 
 	return string(*value)
+}
+
+func formatNullableString(value *string) string {
+	if value == nil {
+		return ""
+	}
+
+	return *value
 }
 
 func escapePlainPath(path string) string {
