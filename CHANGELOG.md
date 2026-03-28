@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.3.0] - 2026-03-27
+
+### Added
+
+- Added `--format csv` output with deterministic headered rows and `--file` support for writing reports to disk.
+
+### Changed
+
+- Replaced the old `--json` and `--plain` flags with a canonical `--format <human|json|plain|csv>` interface.
+- Made `--file <path|->` a generic output destination override for all formats, including human output.
+- Updated release verification, documentation, and formatter coverage to match the new output contract.
+
+### Removed
+
+- Removed the legacy `--json`, `--plain`, and dead `--no-color` flags from the CLI surface.
+
 ## [0.1.2.0] - 2026-03-27
 
 ### Changed
