@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Added
 
 - Added `--format csv` output with deterministic headered rows and `--file` support for writing reports to disk.
+- Added a root `Makefile` with standard local targets for build, formatting, tests, vetting, install, and release verification.
 
 ### Changed
 
@@ -14,6 +15,7 @@ All notable changes to this project will be documented in this file.
 - Made `--file <path|->` a generic output destination override for all formats, including human output.
 - Updated release verification, documentation, and formatter coverage to match the new output contract.
 - Removed per-file byte-size fields and `summary.total_bytes` from human, `--json`, and `--plain` output so the tool stays focused on token budgeting.
+- Extended the GitHub Actions PR test workflow with a formatting job that enforces `gofumpt` and `goimports`.
 
 ### Removed
 

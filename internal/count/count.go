@@ -4,8 +4,9 @@ import (
 	"errors"
 	"unicode/utf8"
 
-	"github.com/richclement/tu/internal/report"
 	"github.com/tiktoken-go/tokenizer"
+
+	"github.com/richclement/tu/internal/report"
 )
 
 const (

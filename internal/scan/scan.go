@@ -19,8 +19,10 @@ import (
 	"github.com/richclement/tu/internal/report"
 )
 
-const largeFileThresholdBytes int64 = 1 << 20
-const maxWorkerCount = 4
+const (
+	largeFileThresholdBytes int64 = 1 << 20
+	maxWorkerCount                = 4
+)
 
 type Config struct {
 	CWD              string

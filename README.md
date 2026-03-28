@@ -28,17 +28,17 @@ Download the archive for your platform from the [GitHub Releases page](https://g
 ## Development
 
 ```sh
-go test ./...
-go vet ./...
-go build ./cmd/tu
+make build
+make fmt
+make test
+make vet
+make ci
 ```
 
 To verify a built binary locally against the canonical fixture corpus:
 
 ```sh
-mkdir -p ./dist
-go build -ldflags "-X main.version=dev" -o ./dist/tu ./cmd/tu
-go run ./tools/releaseverify --binary ./dist/tu --version dev
+make verify-release
 ```
 
 ## Release
