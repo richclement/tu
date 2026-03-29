@@ -24,10 +24,11 @@ const (
 )
 
 type Summary struct {
-	FilesSeen    int64 `json:"files_seen"`
-	FilesCounted int64 `json:"files_counted"`
-	FilesSkipped int64 `json:"files_skipped"`
-	TotalTokens  int64 `json:"total_tokens"`
+	FilesSeen        int64 `json:"files_seen"`
+	FilesCounted     int64 `json:"files_counted"`
+	FilesSkipped     int64 `json:"files_skipped"`
+	TotalTokens      int64 `json:"total_tokens"`
+	HeuristicResults int64 `json:"-"`
 }
 
 type Result struct {

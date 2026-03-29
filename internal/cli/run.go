@@ -120,7 +120,7 @@ func writeSummary(stderr io.Writer, scanReport report.ScanReport, opts Options) 
 			"files counted: %d, files skipped: %d, heuristic results: %d\n",
 			scanReport.Summary.FilesCounted,
 			scanReport.Summary.FilesSkipped,
-			countHeuristic(scanReport.Results),
+			scanReport.Summary.HeuristicResults,
 		)
 		return
 	}
@@ -128,15 +128,4 @@ func writeSummary(stderr io.Writer, scanReport report.ScanReport, opts Options) 
 	if scanReport.Summary.FilesSkipped > 0 {
 		fmt.Fprintf(stderr, "warning: %d files skipped during scan\n", scanReport.Summary.FilesSkipped)
 	}
-}
-
-func countHeuristic(results []report.Result) int64 {
-	var total int64
-	for _, result := range results {
-		if result.Method != nil && *result.Method == report.MethodHeuristic {
-			total++
-		}
-	}
-
-	return total
 }

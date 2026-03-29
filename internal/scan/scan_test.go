@@ -233,6 +233,63 @@ func TestBuildReportClassifiesSkippedFiles(t *testing.T) {
 	}
 }
 
+func TestSummarizeCountsHeuristicResults(t *testing.T) {
+	t.Parallel()
+
+	exactTokens := int64(10)
+	heuristicTokensOne := int64(7)
+	heuristicTokensTwo := int64(5)
+	exactMethod := reportpkg.MethodExact
+	heuristicMethod := reportpkg.MethodHeuristic
+	skippedReason := "binary"
+
+	summary := summarize([]reportpkg.Result{
+		{
+			Kind:   reportpkg.ResultKindFile,
+			Path:   "exact.txt",
+			Tokens: &exactTokens,
+			Method: &exactMethod,
+			Status: reportpkg.StatusCounted,
+		},
+		{
+			Kind:   reportpkg.ResultKindFile,
+			Path:   "heuristic-one.txt",
+			Tokens: &heuristicTokensOne,
+			Method: &heuristicMethod,
+			Status: reportpkg.StatusCounted,
+		},
+		{
+			Kind:   reportpkg.ResultKindFile,
+			Path:   "heuristic-two.txt",
+			Tokens: &heuristicTokensTwo,
+			Method: &heuristicMethod,
+			Status: reportpkg.StatusCounted,
+		},
+		{
+			Kind:   reportpkg.ResultKindFile,
+			Path:   "skipped.bin",
+			Status: reportpkg.StatusSkipped,
+			Reason: &skippedReason,
+		},
+	})
+
+	if summary.FilesSeen != 4 {
+		t.Fatalf("expected 4 files seen, got %d", summary.FilesSeen)
+	}
+	if summary.FilesCounted != 3 {
+		t.Fatalf("expected 3 files counted, got %d", summary.FilesCounted)
+	}
+	if summary.FilesSkipped != 1 {
+		t.Fatalf("expected 1 file skipped, got %d", summary.FilesSkipped)
+	}
+	if summary.HeuristicResults != 2 {
+		t.Fatalf("expected 2 heuristic results, got %d", summary.HeuristicResults)
+	}
+	if summary.TotalTokens != exactTokens+heuristicTokensOne+heuristicTokensTwo {
+		t.Fatalf("expected total tokens %d, got %d", exactTokens+heuristicTokensOne+heuristicTokensTwo, summary.TotalTokens)
+	}
+}
+
 func TestBuildReportSkipsTooLargeFiles(t *testing.T) {
 	t.Parallel()
 

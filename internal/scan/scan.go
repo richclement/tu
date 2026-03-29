@@ -258,6 +258,9 @@ func summarize(results []report.Result) report.Summary {
 			if result.Tokens != nil {
 				summary.TotalTokens += *result.Tokens
 			}
+			if result.Method != nil && *result.Method == report.MethodHeuristic {
+				summary.HeuristicResults++
+			}
 		case report.StatusSkipped:
 			summary.FilesSkipped++
 		}

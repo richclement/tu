@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/richclement/tu/internal/report"
 	"github.com/richclement/tu/internal/testfixture"
 )
 
@@ -111,6 +112,9 @@ func TestRunJSONOutput(t *testing.T) {
 	}
 	if _, ok := summary["total_bytes"]; ok {
 		t.Fatalf("expected summary.total_bytes to be absent, got %v", summary)
+	}
+	if _, ok := summary["heuristic_results"]; ok {
+		t.Fatalf("expected summary.heuristic_results to be absent, got %v", summary)
 	}
 	results, ok := decoded["results"].([]any)
 	if !ok {
@@ -220,6 +224,36 @@ func TestRunSummarizeHumanOutput(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "files counted:") {
 		t.Fatalf("expected stderr summary, got %q", stderr.String())
+	}
+}
+
+func TestWriteSummaryUsesPrecomputedHeuristicCount(t *testing.T) {
+	t.Parallel()
+
+	var stderr bytes.Buffer
+	totalTokens := int64(12)
+
+	writeSummary(&stderr, report.ScanReport{
+		Summary: report.Summary{
+			FilesCounted:     4,
+			FilesSkipped:     1,
+			HeuristicResults: 3,
+		},
+		Results: []report.Result{
+			{
+				Kind:   report.ResultKindSummary,
+				Path:   "repo",
+				Tokens: &totalTokens,
+				Status: report.StatusCounted,
+			},
+		},
+	}, Options{
+		Output: OutputHuman,
+		Quiet:  false,
+	})
+
+	if !strings.Contains(stderr.String(), "heuristic results: 3") {
+		t.Fatalf("expected precomputed heuristic count in stderr, got %q", stderr.String())
 	}
 }
 
