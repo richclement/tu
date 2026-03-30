@@ -103,6 +103,33 @@ func TestJSONEmptyResultsUsesArray(t *testing.T) {
 	}
 }
 
+func TestJSONIncludesThresholdWhenSet(t *testing.T) {
+	t.Parallel()
+
+	threshold := int64(9)
+	got, err := JSON(report.ScanReport{
+		SchemaVersion: report.SchemaVersionV1,
+		Threshold:     &threshold,
+	})
+	if err != nil {
+		t.Fatalf("JSON returned error: %v", err)
+	}
+
+	if !bytes.Contains(got, []byte(`"threshold": 9`)) {
+		t.Fatalf("expected threshold in json output, got %s", got)
+	}
+}
+
+func TestHumanEmptyResultsUsesThresholdMessageWhenSet(t *testing.T) {
+	t.Parallel()
+
+	threshold := int64(4)
+	got := Human(report.ScanReport{Threshold: &threshold})
+	if string(got) != "No entries matched threshold.\n" {
+		t.Fatalf("expected threshold-aware human message, got %q", got)
+	}
+}
+
 func TestPlainEscapesUnsafePathCharacters(t *testing.T) {
 	t.Parallel()
 

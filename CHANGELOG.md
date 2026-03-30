@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 
 - Added `--format csv` output with deterministic headered rows and `--file` support for writing reports to disk.
 - Added a root `Makefile` with standard local targets for build, formatting, tests, vetting, install, and release verification.
+- Added `--threshold` / `-t` to filter displayed rows by token count, including negative-threshold filtering for rows below an absolute token ceiling.
 
 ### Changed
 
@@ -15,6 +16,7 @@ All notable changes to this project will be documented in this file.
 - Made `--file <path|->` a generic output destination override for all formats, including human output.
 - Replaced `--non-recursive` with `--depth <n>` and `--summarize`, where `--depth 1` keeps scans at the top level and `--summarize` emits a single aggregate row for the target.
 - Updated release verification, documentation, and formatter coverage to match the new output contract.
+- Added top-level JSON `threshold` metadata and documented that threshold filtering affects displayed rows while summaries remain full-scan based.
 - Removed per-file byte-size fields and `summary.total_bytes` from human, `--json`, and `--plain` output so the tool stays focused on token budgeting.
 - Added explicit per-result `kind` values to JSON and CSV output, and prefixed CSV exports with a `kind` column.
 - Extended the GitHub Actions PR test workflow with a formatting job that enforces `gofumpt` and `goimports`.

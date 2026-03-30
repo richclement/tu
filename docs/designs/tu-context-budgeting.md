@@ -245,7 +245,7 @@ Rules:
 - keep ordering deterministic regardless of concurrency
 - introduce a large-file threshold and avoid unbounded full-file reads above it
 
-The threshold should be an internal constant in v1, not a user-facing flag.
+The large-file threshold should remain an internal constant. This is separate from the user-facing `--threshold` result filter, which only affects which counted rows are displayed.
 
 ## CLI Specification
 
@@ -260,7 +260,7 @@ No subcommands in v1.
 Usage:
 
 ```text
-tu [path] [--format <human|json|plain|csv>] [--file <path|-] [--sort <mode>] [--depth <n>] [--summarize] [--no-gitignore]
+tu [path] [--format <human|json|plain|csv>] [--file <path|-] [--sort <mode>] [--depth <n>] [--threshold <tokens>] [--summarize] [--no-gitignore]
 tu --help
 tu --version
 ```
@@ -288,6 +288,7 @@ Reject:
 | `--file` | string | `""` | Write primary output to a file path, or `-` for stdout |
 | `--sort` | string | `tokens-desc` | One of `tokens-desc`, `tokens-asc`, `path-asc`, `path-desc` |
 | `-d`, `--depth` | int | unset | Limit file results by relative depth; use `0` for a summary row and `1` for top-level files only |
+| `-t`, `--threshold` | int64 | unset | Filter displayed rows by token count; negative values keep rows below the absolute value |
 | `-s`, `--summarize` | bool | `false` | Alias for `--depth 0` |
 | `--no-gitignore` | bool | `false` | Include files that `.gitignore` would exclude |
 | `-q`, `--quiet` | bool | `false` | Suppress non-essential stderr messages |
@@ -299,6 +300,11 @@ Semantics:
 - `--sort` applies to file and directory targets, even when the result set has one item.
 - `.gitignore` applies only when the target is inside a repo with ignore rules available.
 - `--depth` applies only to directory targets; file targets still emit one file result.
+- `--threshold` filters displayed rows after the full scan summary is computed.
+- positive `--threshold` values keep rows with `tokens > threshold`.
+- `--threshold 0` keeps rows with `tokens > 0`.
+- negative `--threshold` values keep rows with `tokens < abs(threshold)`.
+- rows with no token count, including skipped files, never match a threshold filter.
 - `--summarize` is equivalent to `--depth 0`.
 - v1 does not read from stdin.
 - v1 does not support config files or custom environment-variable configuration.
@@ -465,6 +471,7 @@ Schema shape:
   "recursive": true,
   "respect_gitignore": true,
   "sort": "tokens-desc",
+  "threshold": 500,
   "summary": {
     "files_seen": 0,
     "files_counted": 0,
@@ -496,6 +503,7 @@ Notes:
 
 - `schema_version` starts at `v1`
 - `root` should be the scan root as given to the formatter, not an absolute machine-specific path
+- `threshold` is omitted when no display filter is applied
 
 ### CSV Output
 

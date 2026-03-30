@@ -10,6 +10,10 @@ import (
 
 func Human(scanReport report.ScanReport) []byte {
 	if len(scanReport.Results) == 0 {
+		if scanReport.Threshold != nil {
+			return []byte("No entries matched threshold.\n")
+		}
+
 		return []byte("No files found.\n")
 	}
 

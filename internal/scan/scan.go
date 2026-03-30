@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -28,6 +29,7 @@ type Config struct {
 	CWD              string
 	Target           string
 	MaxDepth         *int
+	Threshold        *int64
 	Summarize        bool
 	RespectGitIgnore bool
 	Sort             string
@@ -69,6 +71,7 @@ func BuildReport(cfg Config) (report.ScanReport, error) {
 		Recursive:        recursive,
 		RespectGitIgnore: respectGitIgnore,
 		Sort:             cfg.Sort,
+		Threshold:        cfg.Threshold,
 		Results:          []report.Result{},
 	}
 
@@ -90,11 +93,42 @@ func BuildReport(cfg Config) (report.ScanReport, error) {
 	scanReport.Summary = summarize(scanReport.Results)
 	if isSummaryOnly(maxDepth) && info.IsDir() {
 		scanReport.Results = []report.Result{summaryResult(rootDisplay, scanReport.Summary.TotalTokens)}
-	} else {
-		sortResults(scanReport.Results, cfg.Sort)
 	}
+	if cfg.Threshold != nil {
+		scanReport.Results = filterResultsByThreshold(scanReport.Results, *cfg.Threshold)
+	}
+	sortResults(scanReport.Results, cfg.Sort)
 
 	return scanReport, nil
+}
+
+func filterResultsByThreshold(results []report.Result, threshold int64) []report.Result {
+	filtered := make([]report.Result, 0, len(results))
+	for _, result := range results {
+		if result.Tokens == nil {
+			continue
+		}
+		if matchesThreshold(*result.Tokens, threshold) {
+			filtered = append(filtered, result)
+		}
+	}
+
+	return filtered
+}
+
+func matchesThreshold(tokens int64, threshold int64) bool {
+	if threshold >= 0 {
+		return tokens > threshold
+	}
+	if threshold == math.MinInt64 {
+		return false
+	}
+
+	return uint64(tokens) < absThresholdMagnitude(threshold)
+}
+
+func absThresholdMagnitude(threshold int64) uint64 {
+	return uint64(-(threshold + 1)) + 1
 }
 
 func scanDirectory(targetAbs string, rootAbs string, maxDepth *int, matcher *ignoreMatcher, newCounter counterFactory) ([]report.Result, error) {

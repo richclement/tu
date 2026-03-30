@@ -48,6 +48,7 @@ type ScanReport struct {
 	Recursive        bool     `json:"recursive"`
 	RespectGitIgnore bool     `json:"respect_gitignore"`
 	Sort             string   `json:"sort"`
+	Threshold        *int64   `json:"threshold,omitempty"`
 	Summary          Summary  `json:"summary"`
 	Results          []Result `json:"results"`
 }

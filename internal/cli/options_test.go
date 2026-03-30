@@ -1,6 +1,10 @@
 package cli
 
-import "testing"
+import (
+	"math"
+	"strconv"
+	"testing"
+)
 
 func TestParseOptionsDefaults(t *testing.T) {
 	t.Parallel()
@@ -155,6 +159,52 @@ func TestParseOptionsAllowsSummarizeWithDepthZero(t *testing.T) {
 	}
 }
 
+func TestParseOptionsParsesThreshold(t *testing.T) {
+	t.Parallel()
+
+	opts, err := ParseOptions([]string{"repo", "--threshold", "12"})
+	if err != nil {
+		t.Fatalf("ParseOptions returned error: %v", err)
+	}
+
+	if opts.Threshold == nil || *opts.Threshold != 12 {
+		t.Fatalf("expected threshold 12, got %+v", opts.Threshold)
+	}
+}
+
+func TestParseOptionsParsesNegativeThresholdShortForm(t *testing.T) {
+	t.Parallel()
+
+	opts, err := ParseOptions([]string{"repo", "-t", "-5"})
+	if err != nil {
+		t.Fatalf("ParseOptions returned error: %v", err)
+	}
+
+	if opts.Threshold == nil || *opts.Threshold != -5 {
+		t.Fatalf("expected threshold -5, got %+v", opts.Threshold)
+	}
+}
+
+func TestParseOptionsParsesThresholdEqualsForms(t *testing.T) {
+	t.Parallel()
+
+	longOpts, err := ParseOptions([]string{"--threshold=7"})
+	if err != nil {
+		t.Fatalf("ParseOptions returned error for long form: %v", err)
+	}
+	if longOpts.Threshold == nil || *longOpts.Threshold != 7 {
+		t.Fatalf("expected threshold 7, got %+v", longOpts.Threshold)
+	}
+
+	shortOpts, err := ParseOptions([]string{"-t=-9"})
+	if err != nil {
+		t.Fatalf("ParseOptions returned error for short form: %v", err)
+	}
+	if shortOpts.Threshold == nil || *shortOpts.Threshold != -9 {
+		t.Fatalf("expected threshold -9, got %+v", shortOpts.Threshold)
+	}
+}
+
 func TestParseOptionsRejectsLegacyJSONFlag(t *testing.T) {
 	t.Parallel()
 
@@ -248,6 +298,30 @@ func TestParseOptionsRejectsMissingDepthValue(t *testing.T) {
 
 	if _, err := ParseOptions([]string{"--depth"}); err == nil {
 		t.Fatal("expected missing depth value error, got nil")
+	}
+}
+
+func TestParseOptionsRejectsMissingThresholdValue(t *testing.T) {
+	t.Parallel()
+
+	if _, err := ParseOptions([]string{"--threshold"}); err == nil {
+		t.Fatal("expected missing threshold value error, got nil")
+	}
+}
+
+func TestParseOptionsRejectsInvalidThresholdValue(t *testing.T) {
+	t.Parallel()
+
+	if _, err := ParseOptions([]string{"--threshold", "bogus"}); err == nil {
+		t.Fatal("expected invalid threshold error, got nil")
+	}
+}
+
+func TestParseOptionsRejectsMinInt64Threshold(t *testing.T) {
+	t.Parallel()
+
+	if _, err := ParseOptions([]string{"--threshold", strconv.FormatInt(math.MinInt64, 10)}); err == nil {
+		t.Fatal("expected min-int64 threshold error, got nil")
 	}
 }
 

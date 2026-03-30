@@ -47,6 +47,7 @@ func runWithCWD(args []string, stdout io.Writer, stderr io.Writer, version strin
 		CWD:              cwd,
 		Target:           opts.Path,
 		MaxDepth:         opts.Depth,
+		Threshold:        opts.Threshold,
 		Summarize:        opts.Summarize,
 		RespectGitIgnore: !opts.NoGitIgnore,
 		Sort:             string(opts.Sort),

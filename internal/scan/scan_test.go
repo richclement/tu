@@ -233,6 +233,178 @@ func TestBuildReportClassifiesSkippedFiles(t *testing.T) {
 	}
 }
 
+func TestFilterResultsByThresholdPositiveKeepsOnlyHigherTokenCounts(t *testing.T) {
+	t.Parallel()
+
+	lowTokens := int64(3)
+	highTokens := int64(12)
+	filtered := filterResultsByThreshold([]reportpkg.Result{
+		{Path: "low.txt", Tokens: &lowTokens},
+		{Path: "high.txt", Tokens: &highTokens},
+		{Path: "skipped.bin", Tokens: nil},
+	}, 5)
+
+	if paths := resultPaths(filtered); !slices.Equal(paths, []string{"high.txt"}) {
+		t.Fatalf("expected only high.txt to remain, got %v", paths)
+	}
+}
+
+func TestFilterResultsByThresholdNegativeKeepsOnlyLowerTokenCounts(t *testing.T) {
+	t.Parallel()
+
+	lowTokens := int64(3)
+	highTokens := int64(12)
+	filtered := filterResultsByThreshold([]reportpkg.Result{
+		{Path: "low.txt", Tokens: &lowTokens},
+		{Path: "high.txt", Tokens: &highTokens},
+	}, -10)
+
+	if paths := resultPaths(filtered); !slices.Equal(paths, []string{"low.txt"}) {
+		t.Fatalf("expected only low.txt to remain, got %v", paths)
+	}
+}
+
+func TestBuildReportThresholdKeepsSummaryTotals(t *testing.T) {
+	t.Parallel()
+
+	parent := fixtureParentDir(t)
+	unfiltered, err := BuildReport(Config{
+		CWD:              parent,
+		Target:           "repo",
+		RespectGitIgnore: true,
+		Sort:             "tokens-desc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	filtered, err := BuildReport(Config{
+		CWD:              parent,
+		Target:           "repo",
+		Threshold:        int64Ptr(unfiltered.Summary.TotalTokens),
+		RespectGitIgnore: true,
+		Sort:             "tokens-desc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	if len(filtered.Results) != 0 {
+		t.Fatalf("expected no filtered results, got %+v", filtered.Results)
+	}
+	if filtered.Summary != unfiltered.Summary {
+		t.Fatalf("expected summary to remain unfiltered, got %+v", filtered.Summary)
+	}
+	if filtered.Threshold == nil || *filtered.Threshold != unfiltered.Summary.TotalTokens {
+		t.Fatalf("expected threshold metadata %d, got %+v", unfiltered.Summary.TotalTokens, filtered.Threshold)
+	}
+}
+
+func TestBuildReportThresholdOmitsSkippedRows(t *testing.T) {
+	t.Parallel()
+
+	root := tempRepo(t)
+	writeFile(t, filepath.Join(root, "README.md"), []byte("text for counting\n"))
+	writeFile(t, filepath.Join(root, "binary.dat"), []byte{0x00, 0x01, 0x02, 0x03})
+
+	report, err := BuildReport(Config{
+		CWD:              filepath.Dir(root),
+		Target:           filepath.Base(root),
+		Threshold:        int64Ptr(0),
+		RespectGitIgnore: true,
+		Sort:             "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	if paths := resultPaths(report.Results); !slices.Equal(paths, []string{"README.md"}) {
+		t.Fatalf("expected only counted rows to remain, got %v", paths)
+	}
+	if report.Summary.FilesSkipped != 1 {
+		t.Fatalf("expected skipped summary to remain intact, got %+v", report.Summary)
+	}
+}
+
+func TestBuildReportSummaryThresholdAppliesToAggregateRow(t *testing.T) {
+	t.Parallel()
+
+	parent := fixtureParentDir(t)
+	baseline, err := BuildReport(Config{
+		CWD:              parent,
+		Target:           "repo",
+		MaxDepth:         intPtr(0),
+		Summarize:        true,
+		RespectGitIgnore: true,
+		Sort:             "tokens-desc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	if len(baseline.Results) != 1 || baseline.Results[0].Tokens == nil {
+		t.Fatalf("expected one summary row, got %+v", baseline.Results)
+	}
+
+	filtered, err := BuildReport(Config{
+		CWD:              parent,
+		Target:           "repo",
+		MaxDepth:         intPtr(0),
+		Threshold:        int64Ptr(*baseline.Results[0].Tokens),
+		Summarize:        true,
+		RespectGitIgnore: true,
+		Sort:             "tokens-desc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	if len(filtered.Results) != 0 {
+		t.Fatalf("expected summary row to be filtered out, got %+v", filtered.Results)
+	}
+	if filtered.Summary.TotalTokens != baseline.Summary.TotalTokens {
+		t.Fatalf("expected summary total tokens to remain unchanged, got %+v", filtered.Summary)
+	}
+}
+
+func TestBuildReportThresholdFiltersFileTarget(t *testing.T) {
+	t.Parallel()
+
+	parent := fixtureParentDir(t)
+	target := filepath.ToSlash(filepath.Join("repo", "nested", "child.txt"))
+	baseline, err := BuildReport(Config{
+		CWD:              parent,
+		Target:           target,
+		RespectGitIgnore: true,
+		Sort:             "tokens-desc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	if len(baseline.Results) != 1 || baseline.Results[0].Tokens == nil {
+		t.Fatalf("expected one file result, got %+v", baseline.Results)
+	}
+
+	filtered, err := BuildReport(Config{
+		CWD:              parent,
+		Target:           target,
+		Threshold:        int64Ptr(*baseline.Results[0].Tokens),
+		RespectGitIgnore: true,
+		Sort:             "tokens-desc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	if len(filtered.Results) != 0 {
+		t.Fatalf("expected file result to be filtered out, got %+v", filtered.Results)
+	}
+	if filtered.Summary.TotalTokens != baseline.Summary.TotalTokens {
+		t.Fatalf("expected summary total tokens to remain unchanged, got %+v", filtered.Summary)
+	}
+}
+
 func TestSummarizeCountsHeuristicResults(t *testing.T) {
 	t.Parallel()
 
@@ -396,6 +568,35 @@ func TestBuildReportDeterministicUnderConcurrency(t *testing.T) {
 
 		if !slices.EqualFunc(baseline, report.Results, sameResult) {
 			t.Fatalf("expected deterministic results\nbaseline: %+v\ncurrent: %+v", baseline, report.Results)
+		}
+	}
+}
+
+func TestBuildReportDeterministicUnderConcurrencyWithThreshold(t *testing.T) {
+	t.Parallel()
+
+	parent := fixtureParentDir(t)
+	var baseline []reportpkg.Result
+
+	for i := 0; i < 5; i++ {
+		report, err := BuildReport(Config{
+			CWD:              parent,
+			Target:           "repo",
+			Threshold:        int64Ptr(0),
+			RespectGitIgnore: true,
+			Sort:             "tokens-desc",
+		})
+		if err != nil {
+			t.Fatalf("BuildReport returned error on run %d: %v", i, err)
+		}
+
+		if i == 0 {
+			baseline = report.Results
+			continue
+		}
+
+		if !slices.EqualFunc(baseline, report.Results, sameResult) {
+			t.Fatalf("expected deterministic thresholded results\nbaseline: %+v\ncurrent: %+v", baseline, report.Results)
 		}
 	}
 }
@@ -579,5 +780,9 @@ func sameNullableString(left *string, right *string) bool {
 }
 
 func intPtr(value int) *int {
+	return &value
+}
+
+func int64Ptr(value int64) *int64 {
 	return &value
 }
