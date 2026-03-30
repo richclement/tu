@@ -106,7 +106,7 @@ Current runtime behavior after Slice 4:
 
 - normal text files are counted exactly with `method=exact` and `provider=openai`
 - heuristic counting remains available as a fallback path
-- files above the internal large-file threshold are skipped explicitly as `too-large`
+- files above the configured max-file-size limit are skipped explicitly as `too-large`
 - machine output remains stable while count metadata is now richer
 
 ### Slice 5 Completed
@@ -245,7 +245,7 @@ Rules:
 - keep ordering deterministic regardless of concurrency
 - introduce a large-file threshold and avoid unbounded full-file reads above it
 
-The large-file threshold should remain an internal constant. This is separate from the user-facing `--threshold` result filter, which only affects which counted rows are displayed.
+The large-file threshold should be configurable via a dedicated CLI flag and remain separate from the user-facing `--threshold` result filter, which only affects which counted rows are displayed.
 
 ## CLI Specification
 
@@ -422,11 +422,11 @@ Large files are a real use case, not an edge case.
 v1 requirements:
 
 - stat before reading
-- compare against an internal large-file threshold
+- compare against a configured large-file limit when one is set
 - for files above the threshold, take a bounded-memory path or skip/approximate explicitly
 - never hide that fallback from the user
 
-The exact threshold value can be tuned during implementation, but the behavior cannot remain unspecified.
+The configured size-limit behavior cannot remain unspecified.
 
 ## Output Contract
 

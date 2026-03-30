@@ -206,6 +206,39 @@ func TestParseOptionsParsesThresholdEqualsForms(t *testing.T) {
 	}
 }
 
+func TestParseOptionsParsesMaxFileSize(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name string
+		args []string
+		want int64
+	}{
+		{name: "raw-bytes", args: []string{"--max-file-size", "1000000"}, want: 1000000},
+		{name: "decimal-unit", args: []string{"--max-file-size", "1MB"}, want: 1000000},
+		{name: "binary-unit", args: []string{"--max-file-size", "1MiB"}, want: 1 << 20},
+		{name: "decimal-binary-unit", args: []string{"--max-file-size", "1.5MiB"}, want: 1572864},
+		{name: "space-and-case-insensitive", args: []string{"--max-file-size", "1.5 mib"}, want: 1572864},
+		{name: "rounds-down", args: []string{"--max-file-size", "1.1KiB"}, want: 1126},
+		{name: "equals-form", args: []string{"--max-file-size=1.5MB"}, want: 1500000},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			opts, err := ParseOptions(tc.args)
+			if err != nil {
+				t.Fatalf("ParseOptions returned error: %v", err)
+			}
+			if opts.MaxFileSize == nil || *opts.MaxFileSize != tc.want {
+				t.Fatalf("expected max file size %d, got %+v", tc.want, opts.MaxFileSize)
+			}
+		})
+	}
+}
+
 func TestParseOptionsParsesExcludeLongAndShortForms(t *testing.T) {
 	t.Parallel()
 
@@ -414,6 +447,24 @@ func TestParseOptionsRejectsInvalidThresholdValue(t *testing.T) {
 
 	if _, err := ParseOptions([]string{"--threshold", "bogus"}); err == nil {
 		t.Fatal("expected invalid threshold error, got nil")
+	}
+}
+
+func TestParseOptionsRejectsInvalidMaxFileSizeValue(t *testing.T) {
+	t.Parallel()
+
+	for _, args := range [][]string{
+		{"--max-file-size", "0"},
+		{"--max-file-size", "-1"},
+		{"--max-file-size", "1.5"},
+		{"--max-file-size", "bogus"},
+		{"--max-file-size", "1XB"},
+		{"--max-file-size", "9223372036854775808"},
+		{"--max-file-size", "9223372036854775807PiB"},
+	} {
+		if _, err := ParseOptions(args); err == nil {
+			t.Fatalf("expected invalid max-file-size error for args %v, got nil", args)
+		}
 	}
 }
 

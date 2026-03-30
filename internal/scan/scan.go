@@ -21,8 +21,7 @@ import (
 )
 
 const (
-	largeFileThresholdBytes int64 = 1 << 20
-	maxWorkerCount                = 4
+	maxWorkerCount = 4
 )
 
 type Config struct {
@@ -30,6 +29,7 @@ type Config struct {
 	Target           string
 	MaxDepth         *int
 	Threshold        *int64
+	MaxFileSizeBytes *int64
 	Exclude          []string
 	Summarize        bool
 	RespectGitIgnore bool
@@ -73,6 +73,7 @@ func BuildReport(cfg Config) (report.ScanReport, error) {
 		RespectGitIgnore: respectGitIgnore,
 		Sort:             cfg.Sort,
 		Threshold:        cfg.Threshold,
+		MaxFileSizeBytes: cfg.MaxFileSizeBytes,
 		Exclude:          copyStringSlice(cfg.Exclude),
 		Results:          []report.Result{},
 	}
@@ -88,12 +89,12 @@ func BuildReport(cfg Config) (report.ScanReport, error) {
 	}
 
 	if info.IsDir() {
-		scanReport.Results, err = scanDirectory(targetAbs, rootAbs, maxDepth, matcher, excluder, count.NewCounter)
+		scanReport.Results, err = scanDirectory(targetAbs, rootAbs, maxDepth, matcher, excluder, cfg.MaxFileSizeBytes, count.NewCounter)
 		if err != nil {
 			return report.ScanReport{}, err
 		}
 	} else {
-		result := scanSingleFile(targetAbs, rootAbs, count.NewCounter)
+		result := scanSingleFile(targetAbs, rootAbs, cfg.MaxFileSizeBytes, count.NewCounter)
 		scanReport.Results = append(scanReport.Results, result)
 	}
 
@@ -140,7 +141,7 @@ func absThresholdMagnitude(threshold int64) uint64 {
 	return uint64(-(threshold + 1)) + 1
 }
 
-func scanDirectory(targetAbs string, rootAbs string, maxDepth *int, matcher *ignoreMatcher, excluder *excludeMatcher, newCounter counterFactory) ([]report.Result, error) {
+func scanDirectory(targetAbs string, rootAbs string, maxDepth *int, matcher *ignoreMatcher, excluder *excludeMatcher, maxFileSizeBytes *int64, newCounter counterFactory) ([]report.Result, error) {
 	results := make([]report.Result, 0)
 	resultCh := make(chan report.Result, defaultWorkerCount()*2)
 	tasks := make(chan string, defaultWorkerCount()*2)
@@ -166,7 +167,7 @@ func scanDirectory(targetAbs string, rootAbs string, maxDepth *int, matcher *ign
 			workerCounter := newCounter()
 
 			for taskPath := range tasks {
-				resultCh <- scanFile(taskPath, rootAbs, workerCounter)
+				resultCh <- scanFile(taskPath, rootAbs, maxFileSizeBytes, workerCounter)
 			}
 		}()
 	}
@@ -241,8 +242,8 @@ func scanDirectory(targetAbs string, rootAbs string, maxDepth *int, matcher *ign
 	return results, nil
 }
 
-func scanSingleFile(absPath string, rootAbs string, newCounter counterFactory) report.Result {
-	return scanFile(absPath, rootAbs, newCounter())
+func scanSingleFile(absPath string, rootAbs string, maxFileSizeBytes *int64, newCounter counterFactory) report.Result {
+	return scanFile(absPath, rootAbs, maxFileSizeBytes, newCounter())
 }
 
 func defaultWorkerCount() int {
@@ -257,7 +258,7 @@ func defaultWorkerCount() int {
 	return workers
 }
 
-func scanFile(absPath string, rootAbs string, counter *count.Counter) report.Result {
+func scanFile(absPath string, rootAbs string, maxFileSizeBytes *int64, counter *count.Counter) report.Result {
 	displayPath := relativePath(rootAbs, absPath)
 
 	info, err := os.Stat(absPath)
@@ -269,7 +270,7 @@ func scanFile(absPath string, rootAbs string, counter *count.Counter) report.Res
 		return skippedResult(displayPath, "unreadable")
 	}
 
-	if info.Size() > largeFileThresholdBytes {
+	if maxFileSizeBytes != nil && info.Size() > *maxFileSizeBytes {
 		return skippedResult(displayPath, "too-large")
 	}
 
