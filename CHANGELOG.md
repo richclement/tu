@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-03-30
+
 ### Added
 
 - Added `--format csv` output with deterministic headered rows and `--file` support for writing reports to disk.
