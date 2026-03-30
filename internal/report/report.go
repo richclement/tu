@@ -50,6 +50,7 @@ type ScanReport struct {
 	Sort             string   `json:"sort"`
 	Threshold        *int64   `json:"threshold,omitempty"`
 	Exclude          []string `json:"exclude,omitempty"`
+	ThresholdEmptied bool     `json:"-"`
 	Summary          Summary  `json:"summary"`
 	Results          []Result `json:"results"`
 }

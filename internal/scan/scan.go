@@ -102,7 +102,9 @@ func BuildReport(cfg Config) (report.ScanReport, error) {
 		scanReport.Results = []report.Result{summaryResult(rootDisplay, scanReport.Summary.TotalTokens)}
 	}
 	if cfg.Threshold != nil {
+		resultCountBeforeThreshold := len(scanReport.Results)
 		scanReport.Results = filterResultsByThreshold(scanReport.Results, *cfg.Threshold)
+		scanReport.ThresholdEmptied = resultCountBeforeThreshold > 0 && len(scanReport.Results) == 0
 	}
 	sortResults(scanReport.Results, cfg.Sort)
 

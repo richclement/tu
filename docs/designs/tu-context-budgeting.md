@@ -310,6 +310,7 @@ Semantics:
 - `--exclude` matches file and directory basenames with shell-style glob semantics.
 - excluded files and directories are never counted, never reported as skipped, and never included in summary totals.
 - repeat `--exclude` / `-I` to apply multiple masks in the order provided.
+- `--exclude` does not disable `.gitignore`; use `--no-gitignore` if you want ignored files included in the scan.
 - `--summarize` is equivalent to `--depth 0`.
 - v1 does not read from stdin.
 - v1 does not support config files or custom environment-variable configuration.

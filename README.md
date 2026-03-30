@@ -21,6 +21,8 @@ Threshold filtering is strict: positive values keep only rows with token counts 
 
 Exclude filtering is scan-time, not display-time: matching files and directories are skipped before counting, before skipped-file classification, and before summary totals are computed. Excluded paths do not appear in any output format, do not contribute to `files_seen`, `files_counted`, `files_skipped`, `heuristic_results`, or `total_tokens`, and are exposed in JSON output as top-level `exclude` metadata when set.
 
+`--exclude` does not disable `.gitignore` processing. If you want ignored files to participate in the scan at all, use `--no-gitignore`.
+
 ## Installation
 
 ### Homebrew

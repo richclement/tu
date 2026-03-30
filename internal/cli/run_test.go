@@ -614,6 +614,27 @@ func TestRunThresholdAppliesAfterExclude(t *testing.T) {
 	}
 }
 
+func TestRunExcludeTargetWithThresholdShowsNoFilesFound(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := runWithCWD(
+		[]string{"repo", "--exclude", "repo", "--threshold", "0"},
+		&stdout,
+		&stderr,
+		"dev",
+		scanFixtureParentDir(t),
+	)
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+	if stdout.String() != "No files found.\n" {
+		t.Fatalf("expected no-files message for excluded target, got %q", stdout.String())
+	}
+}
+
 func TestRunFileDashWritesToStdout(t *testing.T) {
 	t.Parallel()
 
