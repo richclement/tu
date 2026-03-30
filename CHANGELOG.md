@@ -13,13 +13,16 @@ All notable changes to this project will be documented in this file.
 
 - Replaced the old `--json` and `--plain` flags with a canonical `--format <human|json|plain|csv>` interface.
 - Made `--file <path|->` a generic output destination override for all formats, including human output.
+- Replaced `--non-recursive` with `--depth <n>` and `--summarize`, where `--depth 1` keeps scans at the top level and `--summarize` emits a single aggregate row for the target.
 - Updated release verification, documentation, and formatter coverage to match the new output contract.
 - Removed per-file byte-size fields and `summary.total_bytes` from human, `--json`, and `--plain` output so the tool stays focused on token budgeting.
+- Added explicit per-result `kind` values to JSON and CSV output, and prefixed CSV exports with a `kind` column.
 - Extended the GitHub Actions PR test workflow with a formatting job that enforces `gofumpt` and `goimports`.
 
 ### Removed
 
 - Removed the legacy `--json`, `--plain`, and dead `--no-color` flags from the CLI surface.
+- Removed the `--non-recursive` flag in favor of depth-based traversal controls.
 
 ## [0.1.1] - 2026-03-27
 

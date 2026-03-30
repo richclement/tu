@@ -2,6 +2,13 @@ package report
 
 const SchemaVersionV1 = "v1"
 
+type ResultKind string
+
+const (
+	ResultKindFile    ResultKind = "file"
+	ResultKindSummary ResultKind = "summary"
+)
+
 type Status string
 
 const (
@@ -17,19 +24,21 @@ const (
 )
 
 type Summary struct {
-	FilesSeen    int64 `json:"files_seen"`
-	FilesCounted int64 `json:"files_counted"`
-	FilesSkipped int64 `json:"files_skipped"`
-	TotalTokens  int64 `json:"total_tokens"`
+	FilesSeen        int64 `json:"files_seen"`
+	FilesCounted     int64 `json:"files_counted"`
+	FilesSkipped     int64 `json:"files_skipped"`
+	TotalTokens      int64 `json:"total_tokens"`
+	HeuristicResults int64 `json:"-"`
 }
 
 type Result struct {
-	Path     string  `json:"path"`
-	Tokens   *int64  `json:"tokens"`
-	Method   *Method `json:"method"`
-	Provider *string `json:"provider"`
-	Status   Status  `json:"status"`
-	Reason   *string `json:"reason"`
+	Kind     ResultKind `json:"kind"`
+	Path     string     `json:"path"`
+	Tokens   *int64     `json:"tokens"`
+	Method   *Method    `json:"method"`
+	Provider *string    `json:"provider"`
+	Status   Status     `json:"status"`
+	Reason   *string    `json:"reason"`
 }
 
 type ScanReport struct {

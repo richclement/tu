@@ -49,12 +49,13 @@ func CSV(scanReport report.ScanReport) ([]byte, error) {
 	var buf bytes.Buffer
 
 	writer := csv.NewWriter(&buf)
-	if err := writer.Write([]string{"path", "tokens", "method", "provider", "status", "reason"}); err != nil {
+	if err := writer.Write([]string{"kind", "path", "tokens", "method", "provider", "status", "reason"}); err != nil {
 		return nil, fmt.Errorf("write csv header: %w", err)
 	}
 
 	for _, result := range ensureResults(scanReport.Results) {
 		if err := writer.Write([]string{
+			string(result.Kind),
 			result.Path,
 			formatNullableInt(result.Tokens),
 			formatNullableMethod(result.Method),

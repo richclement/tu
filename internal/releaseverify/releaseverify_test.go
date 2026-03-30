@@ -72,3 +72,26 @@ func TestCompareResultsMismatch(t *testing.T) {
 		})
 	}
 }
+
+func TestCommandArgsForBinaryUsesDistinctOutputFiles(t *testing.T) {
+	t.Parallel()
+
+	currentCase := commandCase{
+		name:       "csv-file",
+		args:       []string{"repo", "--format", "csv", "--file", filepath.Join("/tmp", "report.csv"), "--quiet"},
+		outputFile: filepath.Join("/tmp", "report.csv"),
+	}
+
+	expectedArgs, expectedOutput := commandArgsForBinary(currentCase, "reference")
+	actualArgs, actualOutput := commandArgsForBinary(currentCase, "release")
+
+	if expectedOutput == actualOutput {
+		t.Fatalf("expected distinct output files, got %q", expectedOutput)
+	}
+	if expectedArgs[4] != expectedOutput {
+		t.Fatalf("expected reference args to use %q, got %q", expectedOutput, expectedArgs[4])
+	}
+	if actualArgs[4] != actualOutput {
+		t.Fatalf("expected release args to use %q, got %q", actualOutput, actualArgs[4])
+	}
+}

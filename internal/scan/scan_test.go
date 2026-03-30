@@ -18,7 +18,6 @@ func TestBuildReportDirectoryRespectsGitIgnore(t *testing.T) {
 	report, err := BuildReport(Config{
 		CWD:              fixtureParentDir(t),
 		Target:           "repo",
-		Recursive:        true,
 		RespectGitIgnore: true,
 		Sort:             "path-asc",
 	})
@@ -60,7 +59,6 @@ func TestBuildReportNoGitIgnoreIncludesIgnoredFiles(t *testing.T) {
 	report, err := BuildReport(Config{
 		CWD:              fixtureParentDir(t),
 		Target:           "repo",
-		Recursive:        true,
 		RespectGitIgnore: false,
 		Sort:             "path-asc",
 	})
@@ -76,13 +74,13 @@ func TestBuildReportNoGitIgnoreIncludesIgnoredFiles(t *testing.T) {
 	}
 }
 
-func TestBuildReportNonRecursiveSkipsNestedDirectories(t *testing.T) {
+func TestBuildReportDepthOneSkipsNestedDirectories(t *testing.T) {
 	t.Parallel()
 
 	report, err := BuildReport(Config{
 		CWD:              fixtureParentDir(t),
 		Target:           "repo",
-		Recursive:        false,
+		MaxDepth:         intPtr(1),
 		RespectGitIgnore: true,
 		Sort:             "path-asc",
 	})
@@ -92,7 +90,72 @@ func TestBuildReportNonRecursiveSkipsNestedDirectories(t *testing.T) {
 
 	paths := resultPaths(report.Results)
 	if slices.Contains(paths, "nested/child.txt") || slices.Contains(paths, "nested/local.txt") {
-		t.Fatalf("expected nested files to be skipped in non-recursive mode, got %v", paths)
+		t.Fatalf("expected nested files to be skipped at depth 1, got %v", paths)
+	}
+	if report.Recursive {
+		t.Fatal("expected depth-1 report to be non-recursive")
+	}
+}
+
+func TestBuildReportDepthTwoIncludesNestedFiles(t *testing.T) {
+	t.Parallel()
+
+	report, err := BuildReport(Config{
+		CWD:              fixtureParentDir(t),
+		Target:           "repo",
+		MaxDepth:         intPtr(2),
+		RespectGitIgnore: true,
+		Sort:             "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	paths := resultPaths(report.Results)
+	if !slices.Contains(paths, "nested/child.txt") || !slices.Contains(paths, "nested/local.txt") {
+		t.Fatalf("expected nested files at depth 2, got %v", paths)
+	}
+	if !report.Recursive {
+		t.Fatal("expected depth-2 report to be recursive")
+	}
+}
+
+func TestBuildReportSummarizeReturnsSingleSummaryRow(t *testing.T) {
+	t.Parallel()
+
+	report, err := BuildReport(Config{
+		CWD:              fixtureParentDir(t),
+		Target:           "repo",
+		MaxDepth:         intPtr(0),
+		Summarize:        true,
+		RespectGitIgnore: true,
+		Sort:             "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	if len(report.Results) != 1 {
+		t.Fatalf("expected one summary row, got %d", len(report.Results))
+	}
+	result := report.Results[0]
+	if result.Kind != reportpkg.ResultKindSummary {
+		t.Fatalf("expected summary kind, got %+v", result)
+	}
+	if result.Path != "repo" {
+		t.Fatalf("expected summary path repo, got %q", result.Path)
+	}
+	if result.Status != reportpkg.StatusCounted {
+		t.Fatalf("expected counted summary result, got %+v", result)
+	}
+	if result.Method != nil || result.Provider != nil || result.Reason != nil {
+		t.Fatalf("expected summary row to omit method/provider/reason, got %+v", result)
+	}
+	if result.Tokens == nil || *result.Tokens != report.Summary.TotalTokens {
+		t.Fatalf("expected summary tokens to match report summary, got %+v", result)
+	}
+	if !report.Recursive {
+		t.Fatal("expected summarize report to stay recursive")
 	}
 }
 
@@ -102,7 +165,8 @@ func TestBuildReportFileTarget(t *testing.T) {
 	report, err := BuildReport(Config{
 		CWD:              fixtureParentDir(t),
 		Target:           filepath.ToSlash(filepath.Join("repo", "nested", "child.txt")),
-		Recursive:        true,
+		MaxDepth:         intPtr(0),
+		Summarize:        true,
 		RespectGitIgnore: true,
 		Sort:             "tokens-desc",
 	})
@@ -118,6 +182,9 @@ func TestBuildReportFileTarget(t *testing.T) {
 	}
 	if report.Results[0].Path != "child.txt" {
 		t.Fatalf("expected child.txt path, got %q", report.Results[0].Path)
+	}
+	if report.Results[0].Kind != reportpkg.ResultKindFile {
+		t.Fatalf("expected file result kind, got %+v", report.Results[0])
 	}
 	if report.Results[0].Status != reportpkg.StatusCounted {
 		t.Fatalf("expected counted result, got %q", report.Results[0].Status)
@@ -141,7 +208,6 @@ func TestBuildReportClassifiesSkippedFiles(t *testing.T) {
 	report, err := BuildReport(Config{
 		CWD:              filepath.Dir(root),
 		Target:           filepath.Base(root),
-		Recursive:        true,
 		RespectGitIgnore: true,
 		Sort:             "path-asc",
 	})
@@ -167,6 +233,63 @@ func TestBuildReportClassifiesSkippedFiles(t *testing.T) {
 	}
 }
 
+func TestSummarizeCountsHeuristicResults(t *testing.T) {
+	t.Parallel()
+
+	exactTokens := int64(10)
+	heuristicTokensOne := int64(7)
+	heuristicTokensTwo := int64(5)
+	exactMethod := reportpkg.MethodExact
+	heuristicMethod := reportpkg.MethodHeuristic
+	skippedReason := "binary"
+
+	summary := summarize([]reportpkg.Result{
+		{
+			Kind:   reportpkg.ResultKindFile,
+			Path:   "exact.txt",
+			Tokens: &exactTokens,
+			Method: &exactMethod,
+			Status: reportpkg.StatusCounted,
+		},
+		{
+			Kind:   reportpkg.ResultKindFile,
+			Path:   "heuristic-one.txt",
+			Tokens: &heuristicTokensOne,
+			Method: &heuristicMethod,
+			Status: reportpkg.StatusCounted,
+		},
+		{
+			Kind:   reportpkg.ResultKindFile,
+			Path:   "heuristic-two.txt",
+			Tokens: &heuristicTokensTwo,
+			Method: &heuristicMethod,
+			Status: reportpkg.StatusCounted,
+		},
+		{
+			Kind:   reportpkg.ResultKindFile,
+			Path:   "skipped.bin",
+			Status: reportpkg.StatusSkipped,
+			Reason: &skippedReason,
+		},
+	})
+
+	if summary.FilesSeen != 4 {
+		t.Fatalf("expected 4 files seen, got %d", summary.FilesSeen)
+	}
+	if summary.FilesCounted != 3 {
+		t.Fatalf("expected 3 files counted, got %d", summary.FilesCounted)
+	}
+	if summary.FilesSkipped != 1 {
+		t.Fatalf("expected 1 file skipped, got %d", summary.FilesSkipped)
+	}
+	if summary.HeuristicResults != 2 {
+		t.Fatalf("expected 2 heuristic results, got %d", summary.HeuristicResults)
+	}
+	if summary.TotalTokens != exactTokens+heuristicTokensOne+heuristicTokensTwo {
+		t.Fatalf("expected total tokens %d, got %d", exactTokens+heuristicTokensOne+heuristicTokensTwo, summary.TotalTokens)
+	}
+}
+
 func TestBuildReportSkipsTooLargeFiles(t *testing.T) {
 	t.Parallel()
 
@@ -176,7 +299,6 @@ func TestBuildReportSkipsTooLargeFiles(t *testing.T) {
 	report, err := BuildReport(Config{
 		CWD:              filepath.Dir(root),
 		Target:           filepath.Base(root),
-		Recursive:        true,
 		RespectGitIgnore: true,
 		Sort:             "path-asc",
 	})
@@ -209,7 +331,6 @@ func TestBuildReportClassifiesPermissionDeniedFiles(t *testing.T) {
 	report, err := BuildReport(Config{
 		CWD:              filepath.Dir(root),
 		Target:           filepath.Base(root),
-		Recursive:        true,
 		RespectGitIgnore: true,
 		Sort:             "path-asc",
 	})
@@ -229,7 +350,6 @@ func TestBuildReportSortPathDesc(t *testing.T) {
 	report, err := BuildReport(Config{
 		CWD:              fixtureParentDir(t),
 		Target:           "repo",
-		Recursive:        true,
 		RespectGitIgnore: true,
 		Sort:             "path-desc",
 	})
@@ -262,7 +382,6 @@ func TestBuildReportDeterministicUnderConcurrency(t *testing.T) {
 		report, err := BuildReport(Config{
 			CWD:              parent,
 			Target:           "repo",
-			Recursive:        true,
 			RespectGitIgnore: true,
 			Sort:             "tokens-desc",
 		})
@@ -309,7 +428,7 @@ func TestScanDirectoryCreatesOneCounterPerWorker(t *testing.T) {
 	rootAbs := filepath.Join(parent, "repo")
 
 	var factoryCalls atomic.Int32
-	results, err := scanDirectory(rootAbs, rootAbs, true, nil, func() *count.Counter {
+	results, err := scanDirectory(rootAbs, rootAbs, nil, nil, func() *count.Counter {
 		factoryCalls.Add(1)
 		return count.NewCounter()
 	})
@@ -419,7 +538,7 @@ func resultsByPath(results []reportpkg.Result) map[string]reportpkg.Result {
 }
 
 func sameResult(left reportpkg.Result, right reportpkg.Result) bool {
-	if left.Path != right.Path || left.Status != right.Status {
+	if left.Kind != right.Kind || left.Path != right.Path || left.Status != right.Status {
 		return false
 	}
 	if !sameNullableInt64(left.Tokens, right.Tokens) {
@@ -457,4 +576,8 @@ func sameNullableString(left *string, right *string) bool {
 	}
 
 	return *left == *right
+}
+
+func intPtr(value int) *int {
+	return &value
 }

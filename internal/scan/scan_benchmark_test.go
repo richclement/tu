@@ -18,7 +18,6 @@ func BenchmarkBuildReportFixtureRepo(b *testing.B) {
 		if _, err := BuildReport(Config{
 			CWD:              parent,
 			Target:           "repo",
-			Recursive:        true,
 			RespectGitIgnore: true,
 			Sort:             "tokens-desc",
 		}); err != nil {
@@ -36,7 +35,6 @@ func BenchmarkBuildReportSyntheticRepo(b *testing.B) {
 		if _, err := BuildReport(Config{
 			CWD:              parent,
 			Target:           "repo",
-			Recursive:        true,
 			RespectGitIgnore: true,
 			Sort:             "tokens-desc",
 		}); err != nil {

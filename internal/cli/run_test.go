@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/richclement/tu/internal/report"
 	"github.com/richclement/tu/internal/testfixture"
 )
 
@@ -112,6 +113,9 @@ func TestRunJSONOutput(t *testing.T) {
 	if _, ok := summary["total_bytes"]; ok {
 		t.Fatalf("expected summary.total_bytes to be absent, got %v", summary)
 	}
+	if _, ok := summary["heuristic_results"]; ok {
+		t.Fatalf("expected summary.heuristic_results to be absent, got %v", summary)
+	}
 	results, ok := decoded["results"].([]any)
 	if !ok {
 		t.Fatalf("expected results array, got %T", decoded["results"])
@@ -120,6 +124,9 @@ func TestRunJSONOutput(t *testing.T) {
 		result, ok := raw.(map[string]any)
 		if !ok {
 			t.Fatalf("expected result object at index %d, got %T", index, raw)
+		}
+		if result["kind"] == nil {
+			t.Fatalf("expected result[%d] kind to be present, got %v", index, result)
 		}
 		if _, ok := result["bytes"]; ok {
 			t.Fatalf("expected result[%d] bytes to be absent, got %v", index, result)
@@ -192,8 +199,61 @@ func TestRunCSVOutput(t *testing.T) {
 	if len(lines) < 2 {
 		t.Fatalf("expected csv header plus rows, got %q", stdout.String())
 	}
-	if lines[0] != "path,tokens,method,provider,status,reason" {
+	if lines[0] != "kind,path,tokens,method,provider,status,reason" {
 		t.Fatalf("unexpected csv header %q", lines[0])
+	}
+}
+
+func TestRunSummarizeHumanOutput(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := runWithCWD([]string{"repo", "--summarize"}, &stdout, &stderr, "dev", scanFixtureParentDir(t))
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected human header plus one summary row, got %q", stdout.String())
+	}
+	if !strings.Contains(lines[1], "repo") {
+		t.Fatalf("expected summary row path in human output, got %q", lines[1])
+	}
+	if !strings.Contains(stderr.String(), "files counted:") {
+		t.Fatalf("expected stderr summary, got %q", stderr.String())
+	}
+}
+
+func TestWriteSummaryUsesPrecomputedHeuristicCount(t *testing.T) {
+	t.Parallel()
+
+	var stderr bytes.Buffer
+	totalTokens := int64(12)
+
+	writeSummary(&stderr, report.ScanReport{
+		Summary: report.Summary{
+			FilesCounted:     4,
+			FilesSkipped:     1,
+			HeuristicResults: 3,
+		},
+		Results: []report.Result{
+			{
+				Kind:   report.ResultKindSummary,
+				Path:   "repo",
+				Tokens: &totalTokens,
+				Status: report.StatusCounted,
+			},
+		},
+	}, Options{
+		Output: OutputHuman,
+		Quiet:  false,
+	})
+
+	if !strings.Contains(stderr.String(), "heuristic results: 3") {
+		t.Fatalf("expected precomputed heuristic count in stderr, got %q", stderr.String())
 	}
 }
 
@@ -311,7 +371,7 @@ func TestRunWritesCSVToFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read output file: %v", err)
 	}
-	if !strings.HasPrefix(string(contents), "path,tokens,method,provider,status,reason\n") {
+	if !strings.HasPrefix(string(contents), "kind,path,tokens,method,provider,status,reason\n") {
 		t.Fatalf("expected csv header in file, got %q", string(contents))
 	}
 }

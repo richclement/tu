@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/richclement/tu/internal/testfixture"
 )
@@ -71,12 +72,14 @@ func Verify(binaryPath string, version string) error {
 	}
 
 	for _, currentCase := range cases {
-		expected, err := runCommand(referenceBinary, currentCase.args, currentCase.cwd, currentCase.outputFile)
+		expectedArgs, expectedOutputFile := commandArgsForBinary(currentCase, "reference")
+		expected, err := runCommand(referenceBinary, expectedArgs, currentCase.cwd, expectedOutputFile)
 		if err != nil {
 			return fmt.Errorf("run reference binary for %s: %w", currentCase.name, err)
 		}
 
-		actual, err := runCommand(binaryAbs, currentCase.args, currentCase.cwd, currentCase.outputFile)
+		actualArgs, actualOutputFile := commandArgsForBinary(currentCase, "release")
+		actual, err := runCommand(binaryAbs, actualArgs, currentCase.cwd, actualOutputFile)
 		if err != nil {
 			return fmt.Errorf("run release binary for %s: %w", currentCase.name, err)
 		}
@@ -87,6 +90,35 @@ func Verify(binaryPath string, version string) error {
 	}
 
 	return nil
+}
+
+func commandArgsForBinary(currentCase commandCase, label string) ([]string, string) {
+	if currentCase.outputFile == "" || currentCase.outputFile == "-" {
+		return currentCase.args, currentCase.outputFile
+	}
+
+	outputFile := outputFileForLabel(currentCase.outputFile, label)
+	args := make([]string, len(currentCase.args))
+	copy(args, currentCase.args)
+
+	for i := 0; i < len(args); i++ {
+		switch {
+		case args[i] == "--file" && i+1 < len(args):
+			args[i+1] = outputFile
+			return args, outputFile
+		case strings.HasPrefix(args[i], "--file="):
+			args[i] = "--file=" + outputFile
+			return args, outputFile
+		}
+	}
+
+	return args, outputFile
+}
+
+func outputFileForLabel(path string, label string) string {
+	ext := filepath.Ext(path)
+	base := strings.TrimSuffix(path, ext)
+	return base + "-" + label + ext
 }
 
 func buildReferenceBinary(repoRoot string, outputPath string, version string) error {
