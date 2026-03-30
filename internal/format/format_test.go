@@ -120,6 +120,23 @@ func TestJSONIncludesThresholdWhenSet(t *testing.T) {
 	}
 }
 
+func TestJSONIncludesMaxFileSizeWhenSet(t *testing.T) {
+	t.Parallel()
+
+	maxFileSize := int64(1572864)
+	got, err := JSON(report.ScanReport{
+		SchemaVersion:    report.SchemaVersionV1,
+		MaxFileSizeBytes: &maxFileSize,
+	})
+	if err != nil {
+		t.Fatalf("JSON returned error: %v", err)
+	}
+
+	if !bytes.Contains(got, []byte(`"max_file_size_bytes": 1572864`)) {
+		t.Fatalf("expected max_file_size_bytes in json output, got %s", got)
+	}
+}
+
 func TestHumanEmptyResultsUsesThresholdMessageWhenSet(t *testing.T) {
 	t.Parallel()
 

@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 - Added a root `Makefile` with standard local targets for build, formatting, tests, vetting, install, and release verification.
 - Added `--threshold` / `-t` to filter displayed rows by token count, including negative-threshold filtering for rows below an absolute token ceiling.
 - Added repeatable `-I` / `--exclude` scan-time glob exclusions for matching file and directory basenames.
+- Added optional `--max-file-size` large-file skipping with raw byte and human-readable size parsing, including decimal unit values and JSON metadata for the applied byte limit.
 
 ### Changed
 
@@ -23,6 +24,7 @@ All notable changes to this project will be documented in this file.
 - Extended the GitHub Actions PR test workflow with a formatting job that enforces `gofumpt` and `goimports`.
 - Added top-level JSON `exclude` metadata and documented that exclude filtering removes matching paths from both results and summary totals.
 - Reject malformed `--exclude` globs as invalid usage instead of silently treating them as literal basenames.
+- Removed the default always-on large-file cutoff so file-size skipping only applies when `--max-file-size` is set.
 
 ### Removed
 

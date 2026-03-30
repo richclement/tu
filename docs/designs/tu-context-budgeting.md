@@ -106,7 +106,7 @@ Current runtime behavior after Slice 4:
 
 - normal text files are counted exactly with `method=exact` and `provider=openai`
 - heuristic counting remains available as a fallback path
-- files above the internal large-file threshold are skipped explicitly as `too-large`
+- files above the configured max-file-size limit are skipped explicitly as `too-large`
 - machine output remains stable while count metadata is now richer
 
 ### Slice 5 Completed
@@ -243,9 +243,9 @@ Rules:
 - never spawn one goroutine per file
 - never read the whole repo into memory
 - keep ordering deterministic regardless of concurrency
-- introduce a large-file threshold and avoid unbounded full-file reads above it
+- support an optional large-file limit for users who want to skip oversized files explicitly
 
-The large-file threshold should remain an internal constant. This is separate from the user-facing `--threshold` result filter, which only affects which counted rows are displayed.
+The large-file limit should be configurable via a dedicated CLI flag and remain separate from the user-facing `--threshold` result filter, which only affects which counted rows are displayed. By design, there is no default enforced size cap. `tu` attempts to count regular files unless the user opts into `--max-file-size`.
 
 ## CLI Specification
 
@@ -260,7 +260,7 @@ No subcommands in v1.
 Usage:
 
 ```text
-tu [path] [--format <human|json|plain|csv>] [--file <path|-] [--sort <mode>] [--depth <n>] [--threshold <tokens>] [--exclude <glob>]... [--summarize] [--no-gitignore]
+tu [path] [--format <human|json|plain|csv>] [--file <path|-] [--sort <mode>] [--depth <n>] [--threshold <tokens>] [--max-file-size <bytes|size>] [--exclude <glob>]... [--summarize] [--no-gitignore]
 tu --help
 tu --version
 ```
@@ -419,14 +419,21 @@ Recommended skip reasons:
 
 Large files are a real use case, not an edge case.
 
+Product decision:
+
+- default behavior is to attempt counting regular files regardless of size
+- `--max-file-size` is an opt-in control for users who want predictable skip behavior on oversized files
+- this favors completeness by default over conservative memory protection
+- the memory tradeoff is explicit and accepted, not an accidental regression
+
 v1 requirements:
 
 - stat before reading
-- compare against an internal large-file threshold
-- for files above the threshold, take a bounded-memory path or skip/approximate explicitly
+- compare against a configured large-file limit when one is set
+- for files above the configured limit, skip explicitly as `too-large`
 - never hide that fallback from the user
 
-The exact threshold value can be tuned during implementation, but the behavior cannot remain unspecified.
+The configured size-limit behavior cannot remain unspecified.
 
 ## Output Contract
 
@@ -654,8 +661,9 @@ Mitigation:
 Mitigation:
 
 - stat before read
-- enforce a large-file strategy
-- benchmark with large fixtures
+- document that no size cap is enforced unless the user sets `--max-file-size`
+- keep `--max-file-size` available for operators who need predictable bounds
+- benchmark with large fixtures so the default behavior is understood rather than guessed
 
 ### Risk: concurrency breaks determinism
 

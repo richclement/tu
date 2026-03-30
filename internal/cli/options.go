@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/big"
 	"path"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -43,6 +45,21 @@ var (
 		OutputPlain: {},
 		OutputCSV:   {},
 	}
+	rawByteSizePattern = regexp.MustCompile(`^\d+$`)
+	humanSizePattern   = regexp.MustCompile(`^(\d+(?:\.\d+)?)\s*([A-Za-z]+)$`)
+	sizeUnits          = map[string]int64{
+		"b":   1,
+		"kb":  1000,
+		"mb":  1000 * 1000,
+		"gb":  1000 * 1000 * 1000,
+		"tb":  1000 * 1000 * 1000 * 1000,
+		"pb":  1000 * 1000 * 1000 * 1000 * 1000,
+		"kib": 1 << 10,
+		"mib": 1 << 20,
+		"gib": 1 << 30,
+		"tib": 1 << 40,
+		"pib": 1 << 50,
+	}
 )
 
 type Options struct {
@@ -52,6 +69,7 @@ type Options struct {
 	Sort        SortMode
 	Depth       *int
 	Threshold   *int64
+	MaxFileSize *int64
 	Exclude     []string
 	Summarize   bool
 	NoGitIgnore bool
@@ -80,6 +98,7 @@ func ParseOptions(args []string) (Options, error) {
 		sortValue      string
 		depthValue     intFlag
 		thresholdValue int64Flag
+		maxFileSize    byteSizeFlag
 		excludeValue   stringSliceFlag
 	)
 
@@ -93,6 +112,7 @@ func ParseOptions(args []string) (Options, error) {
 	fs.Var(&depthValue, "d", "")
 	fs.Var(&thresholdValue, "threshold", "")
 	fs.Var(&thresholdValue, "t", "")
+	fs.Var(&maxFileSize, "max-file-size", "")
 	fs.Var(&excludeValue, "exclude", "")
 	fs.Var(&excludeValue, "I", "")
 	fs.BoolVar(&opts.Summarize, "summarize", false, "")
@@ -135,6 +155,10 @@ func ParseOptions(args []string) (Options, error) {
 		threshold := thresholdValue.value
 		opts.Threshold = &threshold
 	}
+	if maxFileSize.set {
+		size := maxFileSize.value
+		opts.MaxFileSize = &size
+	}
 	if excludeValue.set {
 		opts.Exclude = append(opts.Exclude, excludeValue.values...)
 	}
@@ -167,6 +191,9 @@ func (o Options) Validate() error {
 	if o.Threshold != nil && *o.Threshold == math.MinInt64 {
 		return usageError("threshold must be greater than -9223372036854775808")
 	}
+	if o.MaxFileSize != nil && *o.MaxFileSize <= 0 {
+		return usageError("max-file-size must be greater than 0")
+	}
 	for _, pattern := range o.Exclude {
 		if pattern == "" {
 			return usageError("exclude must not be empty")
@@ -187,7 +214,7 @@ func Usage() string {
 tu shows token usage for files so humans and agents can identify context-heavy files quickly.
 
 Usage:
-  tu [path] [--format <human|json|plain|csv>] [--file <path|-] [--sort <mode>] [--depth <n>] [--threshold <tokens>] [--exclude <glob>]... [--summarize] [--no-gitignore]
+  tu [path] [--format <human|json|plain|csv>] [--file <path|-] [--sort <mode>] [--depth <n>] [--threshold <tokens>] [--max-file-size <bytes|size>] [--exclude <glob>]... [--summarize] [--no-gitignore]
   tu --help
   tu --version
 
@@ -202,6 +229,7 @@ Options:
       --sort           One of: tokens-desc, tokens-asc, path-asc, path-desc
   -d, --depth          Limit file results by depth; use 0 for summary-only, 1 for top-level files
   -t, --threshold      Filter displayed rows by token count; negative values keep rows below abs(threshold)
+      --max-file-size  Skip files larger than this limit before reading; accepts bytes or sizes like 1MiB, 1.5MB, 512KiB
   -I, --exclude        Ignore files and directories whose basename matches the glob; repeatable
   -s, --summarize      Alias for --depth 0
       --no-gitignore   Include files ignored by .gitignore
@@ -228,7 +256,7 @@ func normalizeArgs(args []string) ([]string, []string) {
 		case arg == "--":
 			positionalArgs = append(positionalArgs, args[i+1:]...)
 			return flagArgs, positionalArgs
-		case arg == "--sort" || arg == "--format" || arg == "--file" || arg == "--depth" || arg == "-d" || arg == "--threshold" || arg == "-t" || arg == "--exclude" || arg == "-I":
+		case arg == "--sort" || arg == "--format" || arg == "--file" || arg == "--depth" || arg == "-d" || arg == "--threshold" || arg == "-t" || arg == "--max-file-size" || arg == "--exclude" || arg == "-I":
 			flagArgs = append(flagArgs, arg)
 			if i+1 < len(args) {
 				i++
@@ -241,6 +269,7 @@ func normalizeArgs(args []string) ([]string, []string) {
 			strings.HasPrefix(arg, "-d="),
 			strings.HasPrefix(arg, "--threshold="),
 			strings.HasPrefix(arg, "-t="),
+			strings.HasPrefix(arg, "--max-file-size="),
 			strings.HasPrefix(arg, "--exclude="),
 			strings.HasPrefix(arg, "-I="):
 			flagArgs = append(flagArgs, arg)
@@ -315,4 +344,75 @@ func (f *int64Flag) Set(value string) error {
 	f.set = true
 	f.value = parsed
 	return nil
+}
+
+type byteSizeFlag struct {
+	set   bool
+	value int64
+}
+
+func (f *byteSizeFlag) String() string {
+	if !f.set {
+		return ""
+	}
+
+	return strconv.FormatInt(f.value, 10)
+}
+
+func (f *byteSizeFlag) Set(value string) error {
+	parsed, err := parseByteSize(value)
+	if err != nil {
+		return err
+	}
+
+	f.set = true
+	f.value = parsed
+	return nil
+}
+
+func parseByteSize(value string) (int64, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return 0, fmt.Errorf(`invalid max-file-size %q: expected integer bytes or a size like 1.5MiB, 1MB, 512KiB`, value)
+	}
+	if strings.HasPrefix(trimmed, "-") {
+		return 0, errors.New("max-file-size must be greater than 0")
+	}
+	if rawByteSizePattern.MatchString(trimmed) {
+		parsed, err := strconv.ParseInt(trimmed, 10, 64)
+		if err != nil {
+			return 0, fmt.Errorf(`invalid max-file-size %q: value overflows int64 bytes`, value)
+		}
+		if parsed <= 0 {
+			return 0, errors.New("max-file-size must be greater than 0")
+		}
+		return parsed, nil
+	}
+
+	matches := humanSizePattern.FindStringSubmatch(trimmed)
+	if matches == nil {
+		return 0, fmt.Errorf(`invalid max-file-size %q: expected integer bytes or a size like 1.5MiB, 1MB, 512KiB`, value)
+	}
+
+	unit := strings.ToLower(matches[2])
+	multiplier, ok := sizeUnits[unit]
+	if !ok {
+		return 0, fmt.Errorf(`invalid max-file-size %q: unknown size unit`, value)
+	}
+
+	number := new(big.Rat)
+	if _, ok := number.SetString(matches[1]); !ok {
+		return 0, fmt.Errorf(`invalid max-file-size %q: expected integer bytes or a size like 1.5MiB, 1MB, 512KiB`, value)
+	}
+
+	product := new(big.Rat).Mul(number, new(big.Rat).SetInt64(multiplier))
+	floor := new(big.Int).Quo(product.Num(), product.Denom())
+	if floor.Sign() <= 0 {
+		return 0, errors.New("max-file-size must be greater than 0")
+	}
+	if !floor.IsInt64() {
+		return 0, fmt.Errorf(`invalid max-file-size %q: value overflows int64 bytes`, value)
+	}
+
+	return floor.Int64(), nil
 }

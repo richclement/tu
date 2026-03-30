@@ -1,6 +1,7 @@
 package scan
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -11,6 +12,15 @@ import (
 	reportpkg "github.com/richclement/tu/internal/report"
 	"github.com/richclement/tu/internal/testfixture"
 )
+
+type stubTextCounter struct {
+	result count.Result
+	err    error
+}
+
+func (s stubTextCounter) CountText(string) (count.Result, error) {
+	return s.result, s.err
+}
 
 func TestBuildReportDirectoryRespectsGitIgnore(t *testing.T) {
 	t.Parallel()
@@ -718,15 +728,37 @@ func TestSummarizeCountsHeuristicResults(t *testing.T) {
 	}
 }
 
-func TestBuildReportSkipsTooLargeFiles(t *testing.T) {
+func TestScanFileCountsLargeFilesWhenNoMaxFileSizeIsSet(t *testing.T) {
 	t.Parallel()
 
 	root := tempRepo(t)
-	writeFile(t, filepath.Join(root, "large.txt"), slices.Repeat([]byte("x"), int(largeFileThresholdBytes)+1))
+	size := 1<<20 + 1
+	filePath := filepath.Join(root, "large.txt")
+	writeFile(t, filePath, slices.Repeat([]byte("x"), size))
+
+	result := scanFile(filePath, root, nil, count.NewCounterWithImplementations(
+		stubTextCounter{err: errors.New("force heuristic fallback")},
+		stubTextCounter{result: count.Result{Tokens: 7, Method: reportpkg.MethodHeuristic, Provider: count.HeuristicProvider}},
+	))
+	if result.Status != reportpkg.StatusCounted || result.Tokens == nil {
+		t.Fatalf("expected counted large file, got %+v", result)
+	}
+	if *result.Tokens != 7 {
+		t.Fatalf("expected stub-counted tokens, got %+v", result)
+	}
+}
+
+func TestBuildReportSkipsTooLargeFilesWhenMaxFileSizeIsSet(t *testing.T) {
+	t.Parallel()
+
+	root := tempRepo(t)
+	limit := int64(1 << 20)
+	writeFile(t, filepath.Join(root, "large.txt"), slices.Repeat([]byte("x"), int(limit)+1))
 
 	report, err := BuildReport(Config{
 		CWD:              filepath.Dir(root),
 		Target:           filepath.Base(root),
+		MaxFileSizeBytes: &limit,
 		RespectGitIgnore: true,
 		Sort:             "path-asc",
 	})
@@ -740,6 +772,29 @@ func TestBuildReportSkipsTooLargeFiles(t *testing.T) {
 	}
 	if result.Method != nil || result.Provider != nil || result.Tokens != nil {
 		t.Fatalf("expected too-large skip to have no count metadata, got %+v", result)
+	}
+	if report.Summary.FilesSeen != 1 || report.Summary.FilesCounted != 0 || report.Summary.FilesSkipped != 1 {
+		t.Fatalf("expected size-limited summary accounting, got %+v", report.Summary)
+	}
+}
+
+func TestScanFileCountsFileAtExactMaxFileSizeBoundary(t *testing.T) {
+	t.Parallel()
+
+	root := tempRepo(t)
+	limit := int64(1 << 20)
+	filePath := filepath.Join(root, "boundary.txt")
+	writeFile(t, filePath, slices.Repeat([]byte("x"), int(limit)))
+
+	result := scanFile(filePath, root, &limit, count.NewCounterWithImplementations(
+		stubTextCounter{err: errors.New("force heuristic fallback")},
+		stubTextCounter{result: count.Result{Tokens: 9, Method: reportpkg.MethodHeuristic, Provider: count.HeuristicProvider}},
+	))
+	if result.Status != reportpkg.StatusCounted || result.Tokens == nil {
+		t.Fatalf("expected exact-boundary file to be counted, got %+v", result)
+	}
+	if *result.Tokens != 9 {
+		t.Fatalf("expected stub-counted tokens at boundary, got %+v", result)
 	}
 }
 
@@ -894,7 +949,7 @@ func TestScanSingleFileCreatesOneCounter(t *testing.T) {
 	fileAbs := filepath.Join(rootAbs, "README.md")
 
 	var factoryCalls atomic.Int32
-	result := scanSingleFile(fileAbs, rootAbs, func() *count.Counter {
+	result := scanSingleFile(fileAbs, rootAbs, nil, func() *count.Counter {
 		factoryCalls.Add(1)
 		return count.NewCounter()
 	})
@@ -914,7 +969,7 @@ func TestScanDirectoryCreatesOneCounterPerWorker(t *testing.T) {
 	rootAbs := filepath.Join(parent, "repo")
 
 	var factoryCalls atomic.Int32
-	results, err := scanDirectory(rootAbs, rootAbs, nil, nil, nil, func() *count.Counter {
+	results, err := scanDirectory(rootAbs, rootAbs, nil, nil, nil, nil, func() *count.Counter {
 		factoryCalls.Add(1)
 		return count.NewCounter()
 	})

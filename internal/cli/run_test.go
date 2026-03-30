@@ -130,6 +130,9 @@ func TestRunJSONOutput(t *testing.T) {
 	if _, ok := decoded["threshold"]; ok {
 		t.Fatalf("expected threshold to be omitted when unset, got %v", decoded["threshold"])
 	}
+	if _, ok := decoded["max_file_size_bytes"]; ok {
+		t.Fatalf("expected max_file_size_bytes to be omitted when unset, got %v", decoded["max_file_size_bytes"])
+	}
 	if _, ok := decoded["exclude"]; ok {
 		t.Fatalf("expected exclude to be omitted when unset, got %v", decoded["exclude"])
 	}
@@ -188,6 +191,33 @@ func TestRunJSONOutputIncludesThreshold(t *testing.T) {
 
 	if decoded["threshold"] != float64(10) {
 		t.Fatalf("expected threshold 10 in json output, got %v", decoded["threshold"])
+	}
+}
+
+func TestRunJSONOutputIncludesMaxFileSize(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := runWithCWD(
+		[]string{"repo", "--format", "json", "--max-file-size", "1.5MiB", "--quiet"},
+		&stdout,
+		&stderr,
+		"dev",
+		scanFixtureParentDir(t),
+	)
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &decoded); err != nil {
+		t.Fatalf("unmarshal json output: %v", err)
+	}
+
+	if decoded["max_file_size_bytes"] != float64(1572864) {
+		t.Fatalf("expected max_file_size_bytes 1572864 in json output, got %v", decoded["max_file_size_bytes"])
 	}
 }
 
