@@ -30,6 +30,7 @@ type Config struct {
 	Target           string
 	MaxDepth         *int
 	Threshold        *int64
+	Exclude          []string
 	Summarize        bool
 	RespectGitIgnore bool
 	Sort             string
@@ -72,7 +73,13 @@ func BuildReport(cfg Config) (report.ScanReport, error) {
 		RespectGitIgnore: respectGitIgnore,
 		Sort:             cfg.Sort,
 		Threshold:        cfg.Threshold,
+		Exclude:          copyStringSlice(cfg.Exclude),
 		Results:          []report.Result{},
+	}
+
+	excluder := newExcludeMatcher(cfg.Exclude)
+	if excluder != nil && excluder.shouldExclude(targetAbs) {
+		return scanReport, nil
 	}
 
 	matcher, err := newIgnoreMatcher(rootAbs, respectGitIgnore)
@@ -81,7 +88,7 @@ func BuildReport(cfg Config) (report.ScanReport, error) {
 	}
 
 	if info.IsDir() {
-		scanReport.Results, err = scanDirectory(targetAbs, rootAbs, maxDepth, matcher, count.NewCounter)
+		scanReport.Results, err = scanDirectory(targetAbs, rootAbs, maxDepth, matcher, excluder, count.NewCounter)
 		if err != nil {
 			return report.ScanReport{}, err
 		}
@@ -131,7 +138,7 @@ func absThresholdMagnitude(threshold int64) uint64 {
 	return uint64(-(threshold + 1)) + 1
 }
 
-func scanDirectory(targetAbs string, rootAbs string, maxDepth *int, matcher *ignoreMatcher, newCounter counterFactory) ([]report.Result, error) {
+func scanDirectory(targetAbs string, rootAbs string, maxDepth *int, matcher *ignoreMatcher, excluder *excludeMatcher, newCounter counterFactory) ([]report.Result, error) {
 	results := make([]report.Result, 0)
 	resultCh := make(chan report.Result, defaultWorkerCount()*2)
 	tasks := make(chan string, defaultWorkerCount()*2)
@@ -176,19 +183,27 @@ func scanDirectory(targetAbs string, rootAbs string, maxDepth *int, matcher *ign
 			return nil
 		}
 
-		if entry.IsDir() && matcher != nil {
-			if err := matcher.prepareForDir(currentPath); err != nil {
-				return err
-			}
+		if currentPath == targetAbs {
+			return nil
 		}
 
-		if currentPath == targetAbs {
+		if excluder != nil && excluder.shouldExclude(currentPath) {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+
 			return nil
 		}
 
 		if entry.IsDir() {
 			if entry.Name() == ".git" {
 				return filepath.SkipDir
+			}
+
+			if matcher != nil {
+				if err := matcher.prepareForDir(currentPath); err != nil {
+					return err
+				}
 			}
 
 			if matcher != nil && matcher.shouldIgnore(currentPath, true) {
@@ -492,6 +507,45 @@ func relativePath(rootAbs string, currentPath string) string {
 	}
 
 	return filepath.ToSlash(relPath)
+}
+
+func copyStringSlice(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+
+	return append([]string(nil), values...)
+}
+
+type excludeMatcher struct {
+	patterns []string
+}
+
+func newExcludeMatcher(patterns []string) *excludeMatcher {
+	if len(patterns) == 0 {
+		return nil
+	}
+
+	return &excludeMatcher{patterns: copyStringSlice(patterns)}
+}
+
+func (matcher *excludeMatcher) shouldExclude(absPath string) bool {
+	name := filepath.Base(absPath)
+	if name == "." || name == "" {
+		return false
+	}
+
+	for _, pattern := range matcher.patterns {
+		matched, err := path.Match(pattern, name)
+		if err != nil {
+			matched = pattern == name
+		}
+		if matched {
+			return true
+		}
+	}
+
+	return false
 }
 
 type ignoreMatcher struct {

@@ -51,6 +51,7 @@ type Options struct {
 	Sort        SortMode
 	Depth       *int
 	Threshold   *int64
+	Exclude     []string
 	Summarize   bool
 	NoGitIgnore bool
 	Quiet       bool
@@ -78,6 +79,7 @@ func ParseOptions(args []string) (Options, error) {
 		sortValue      string
 		depthValue     intFlag
 		thresholdValue int64Flag
+		excludeValue   stringSliceFlag
 	)
 
 	fs.BoolVar(&opts.ShowHelp, "help", false, "")
@@ -90,6 +92,8 @@ func ParseOptions(args []string) (Options, error) {
 	fs.Var(&depthValue, "d", "")
 	fs.Var(&thresholdValue, "threshold", "")
 	fs.Var(&thresholdValue, "t", "")
+	fs.Var(&excludeValue, "exclude", "")
+	fs.Var(&excludeValue, "I", "")
 	fs.BoolVar(&opts.Summarize, "summarize", false, "")
 	fs.BoolVar(&opts.Summarize, "s", false, "")
 	fs.BoolVar(&opts.NoGitIgnore, "no-gitignore", false, "")
@@ -130,6 +134,9 @@ func ParseOptions(args []string) (Options, error) {
 		threshold := thresholdValue.value
 		opts.Threshold = &threshold
 	}
+	if excludeValue.set {
+		opts.Exclude = append(opts.Exclude, excludeValue.values...)
+	}
 	if opts.Summarize && opts.Depth == nil {
 		depth := 0
 		opts.Depth = &depth
@@ -159,6 +166,11 @@ func (o Options) Validate() error {
 	if o.Threshold != nil && *o.Threshold == math.MinInt64 {
 		return usageError("threshold must be greater than -9223372036854775808")
 	}
+	for _, pattern := range o.Exclude {
+		if pattern == "" {
+			return usageError("exclude must not be empty")
+		}
+	}
 	if o.Summarize && o.Depth != nil && *o.Depth > 0 {
 		return usageError("--summarize requires --depth 0 when --depth is also provided")
 	}
@@ -171,7 +183,7 @@ func Usage() string {
 tu shows token usage for files so humans and agents can identify context-heavy files quickly.
 
 Usage:
-  tu [path] [--format <human|json|plain|csv>] [--file <path|-] [--sort <mode>] [--depth <n>] [--threshold <tokens>] [--summarize] [--no-gitignore]
+  tu [path] [--format <human|json|plain|csv>] [--file <path|-] [--sort <mode>] [--depth <n>] [--threshold <tokens>] [--exclude <glob>]... [--summarize] [--no-gitignore]
   tu --help
   tu --version
 
@@ -186,6 +198,7 @@ Options:
       --sort           One of: tokens-desc, tokens-asc, path-asc, path-desc
   -d, --depth          Limit file results by depth; use 0 for summary-only, 1 for top-level files
   -t, --threshold      Filter displayed rows by token count; negative values keep rows below abs(threshold)
+  -I, --exclude        Ignore files and directories whose basename matches the glob; repeatable
   -s, --summarize      Alias for --depth 0
       --no-gitignore   Include files ignored by .gitignore
   -q, --quiet          Suppress non-essential stderr messages
@@ -211,7 +224,7 @@ func normalizeArgs(args []string) ([]string, []string) {
 		case arg == "--":
 			positionalArgs = append(positionalArgs, args[i+1:]...)
 			return flagArgs, positionalArgs
-		case arg == "--sort" || arg == "--format" || arg == "--file" || arg == "--depth" || arg == "-d" || arg == "--threshold" || arg == "-t":
+		case arg == "--sort" || arg == "--format" || arg == "--file" || arg == "--depth" || arg == "-d" || arg == "--threshold" || arg == "-t" || arg == "--exclude" || arg == "-I":
 			flagArgs = append(flagArgs, arg)
 			if i+1 < len(args) {
 				i++
@@ -223,7 +236,9 @@ func normalizeArgs(args []string) ([]string, []string) {
 			strings.HasPrefix(arg, "--depth="),
 			strings.HasPrefix(arg, "-d="),
 			strings.HasPrefix(arg, "--threshold="),
-			strings.HasPrefix(arg, "-t="):
+			strings.HasPrefix(arg, "-t="),
+			strings.HasPrefix(arg, "--exclude="),
+			strings.HasPrefix(arg, "-I="):
 			flagArgs = append(flagArgs, arg)
 		case strings.HasPrefix(arg, "-") && arg != "-":
 			flagArgs = append(flagArgs, arg)
@@ -256,6 +271,21 @@ func (f *intFlag) Set(value string) error {
 
 	f.set = true
 	f.value = parsed
+	return nil
+}
+
+type stringSliceFlag struct {
+	set    bool
+	values []string
+}
+
+func (f *stringSliceFlag) String() string {
+	return strings.Join(f.values, ",")
+}
+
+func (f *stringSliceFlag) Set(value string) error {
+	f.set = true
+	f.values = append(f.values, value)
 	return nil
 }
 

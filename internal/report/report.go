@@ -49,6 +49,7 @@ type ScanReport struct {
 	RespectGitIgnore bool     `json:"respect_gitignore"`
 	Sort             string   `json:"sort"`
 	Threshold        *int64   `json:"threshold,omitempty"`
+	Exclude          []string `json:"exclude,omitempty"`
 	Summary          Summary  `json:"summary"`
 	Results          []Result `json:"results"`
 }

@@ -64,6 +64,7 @@ func Verify(binaryPath string, version string) error {
 		{name: "human-directory", args: []string{"repo"}, cwd: fixtureCWD},
 		{name: "json-directory", args: []string{"repo", "--format", "json", "--quiet"}, cwd: fixtureCWD},
 		{name: "json-directory-threshold", args: []string{"repo", "--format", "json", "--threshold", "10", "--quiet"}, cwd: fixtureCWD},
+		{name: "json-directory-exclude", args: []string{"repo", "--format", "json", "--exclude", "README.md", "--quiet"}, cwd: fixtureCWD},
 		{name: "plain-directory", args: []string{"repo", "--format", "plain", "--quiet"}, cwd: fixtureCWD},
 		{name: "json-file", args: []string{filepath.ToSlash(filepath.Join("repo", "nested", "child.txt")), "--format", "json", "--quiet"}, cwd: fixtureCWD},
 		{name: "csv-file", args: []string{"repo", "--format", "csv", "--file", filepath.Join(tempDir, "report.csv"), "--quiet"}, cwd: fixtureCWD, outputFile: filepath.Join(tempDir, "report.csv")},

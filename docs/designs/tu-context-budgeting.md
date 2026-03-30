@@ -260,7 +260,7 @@ No subcommands in v1.
 Usage:
 
 ```text
-tu [path] [--format <human|json|plain|csv>] [--file <path|-] [--sort <mode>] [--depth <n>] [--threshold <tokens>] [--summarize] [--no-gitignore]
+tu [path] [--format <human|json|plain|csv>] [--file <path|-] [--sort <mode>] [--depth <n>] [--threshold <tokens>] [--exclude <glob>]... [--summarize] [--no-gitignore]
 tu --help
 tu --version
 ```
@@ -289,6 +289,7 @@ Reject:
 | `--sort` | string | `tokens-desc` | One of `tokens-desc`, `tokens-asc`, `path-asc`, `path-desc` |
 | `-d`, `--depth` | int | unset | Limit file results by relative depth; use `0` for a summary row and `1` for top-level files only |
 | `-t`, `--threshold` | int64 | unset | Filter displayed rows by token count; negative values keep rows below the absolute value |
+| `-I`, `--exclude` | string[] | unset | Ignore files and directories whose basename matches the glob; repeatable |
 | `-s`, `--summarize` | bool | `false` | Alias for `--depth 0` |
 | `--no-gitignore` | bool | `false` | Include files that `.gitignore` would exclude |
 | `-q`, `--quiet` | bool | `false` | Suppress non-essential stderr messages |
@@ -305,6 +306,10 @@ Semantics:
 - `--threshold 0` keeps rows with `tokens > 0`.
 - negative `--threshold` values keep rows with `tokens < abs(threshold)`.
 - rows with no token count, including skipped files, never match a threshold filter.
+- `--exclude` is a scan-time filter, not a display-time filter.
+- `--exclude` matches file and directory basenames with shell-style glob semantics.
+- excluded files and directories are never counted, never reported as skipped, and never included in summary totals.
+- repeat `--exclude` / `-I` to apply multiple masks in the order provided.
 - `--summarize` is equivalent to `--depth 0`.
 - v1 does not read from stdin.
 - v1 does not support config files or custom environment-variable configuration.
@@ -472,6 +477,7 @@ Schema shape:
   "respect_gitignore": true,
   "sort": "tokens-desc",
   "threshold": 500,
+  "exclude": ["node_modules", "*.min.js"],
   "summary": {
     "files_seen": 0,
     "files_counted": 0,
@@ -504,6 +510,7 @@ Notes:
 - `schema_version` starts at `v1`
 - `root` should be the scan root as given to the formatter, not an absolute machine-specific path
 - `threshold` is omitted when no display filter is applied
+- `exclude` is omitted when no scan-time exclusions are applied
 
 ### CSV Output
 

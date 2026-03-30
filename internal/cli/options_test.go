@@ -2,6 +2,7 @@ package cli
 
 import (
 	"math"
+	"slices"
 	"strconv"
 	"testing"
 )
@@ -205,6 +206,75 @@ func TestParseOptionsParsesThresholdEqualsForms(t *testing.T) {
 	}
 }
 
+func TestParseOptionsParsesExcludeLongAndShortForms(t *testing.T) {
+	t.Parallel()
+
+	longOpts, err := ParseOptions([]string{"repo", "--exclude", "node_modules"})
+	if err != nil {
+		t.Fatalf("ParseOptions returned error for long form: %v", err)
+	}
+	if !slices.Equal(longOpts.Exclude, []string{"node_modules"}) {
+		t.Fatalf("expected exclude node_modules, got %+v", longOpts.Exclude)
+	}
+
+	shortOpts, err := ParseOptions([]string{"repo", "-I", "*.min.js"})
+	if err != nil {
+		t.Fatalf("ParseOptions returned error for short form: %v", err)
+	}
+	if !slices.Equal(shortOpts.Exclude, []string{"*.min.js"}) {
+		t.Fatalf("expected exclude *.min.js, got %+v", shortOpts.Exclude)
+	}
+}
+
+func TestParseOptionsParsesExcludeEqualsForms(t *testing.T) {
+	t.Parallel()
+
+	longOpts, err := ParseOptions([]string{"--exclude=node_modules"})
+	if err != nil {
+		t.Fatalf("ParseOptions returned error for long form: %v", err)
+	}
+	if !slices.Equal(longOpts.Exclude, []string{"node_modules"}) {
+		t.Fatalf("expected exclude node_modules, got %+v", longOpts.Exclude)
+	}
+
+	shortOpts, err := ParseOptions([]string{"-I=*.snap"})
+	if err != nil {
+		t.Fatalf("ParseOptions returned error for short form: %v", err)
+	}
+	if !slices.Equal(shortOpts.Exclude, []string{"*.snap"}) {
+		t.Fatalf("expected exclude *.snap, got %+v", shortOpts.Exclude)
+	}
+}
+
+func TestParseOptionsParsesRepeatedExcludeInOrder(t *testing.T) {
+	t.Parallel()
+
+	opts, err := ParseOptions([]string{"repo", "-I", "node_modules", "--exclude", "*.snap", "--exclude=dist"})
+	if err != nil {
+		t.Fatalf("ParseOptions returned error: %v", err)
+	}
+
+	if !slices.Equal(opts.Exclude, []string{"node_modules", "*.snap", "dist"}) {
+		t.Fatalf("expected ordered excludes, got %+v", opts.Exclude)
+	}
+}
+
+func TestParseOptionsParsesThresholdAndExcludeTogether(t *testing.T) {
+	t.Parallel()
+
+	opts, err := ParseOptions([]string{"repo", "--threshold", "12", "-I", "node_modules"})
+	if err != nil {
+		t.Fatalf("ParseOptions returned error: %v", err)
+	}
+
+	if opts.Threshold == nil || *opts.Threshold != 12 {
+		t.Fatalf("expected threshold 12, got %+v", opts.Threshold)
+	}
+	if !slices.Equal(opts.Exclude, []string{"node_modules"}) {
+		t.Fatalf("expected exclude node_modules, got %+v", opts.Exclude)
+	}
+}
+
 func TestParseOptionsRejectsLegacyJSONFlag(t *testing.T) {
 	t.Parallel()
 
@@ -306,6 +376,22 @@ func TestParseOptionsRejectsMissingThresholdValue(t *testing.T) {
 
 	if _, err := ParseOptions([]string{"--threshold"}); err == nil {
 		t.Fatal("expected missing threshold value error, got nil")
+	}
+}
+
+func TestParseOptionsRejectsMissingExcludeValue(t *testing.T) {
+	t.Parallel()
+
+	if _, err := ParseOptions([]string{"--exclude"}); err == nil {
+		t.Fatal("expected missing exclude value error, got nil")
+	}
+}
+
+func TestParseOptionsRejectsEmptyExcludeValue(t *testing.T) {
+	t.Parallel()
+
+	if _, err := ParseOptions([]string{"--exclude="}); err == nil {
+		t.Fatal("expected empty exclude value error, got nil")
 	}
 }
 
