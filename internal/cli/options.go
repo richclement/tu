@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"strconv"
 	"strings"
 )
@@ -49,6 +50,7 @@ type Options struct {
 	File        string
 	Sort        SortMode
 	Depth       *int
+	Threshold   *int64
 	Summarize   bool
 	NoGitIgnore bool
 	Quiet       bool
@@ -72,9 +74,10 @@ func ParseOptions(args []string) (Options, error) {
 	fs.SetOutput(io.Discard)
 
 	var (
-		formatValue string
-		sortValue   string
-		depthValue  intFlag
+		formatValue    string
+		sortValue      string
+		depthValue     intFlag
+		thresholdValue int64Flag
 	)
 
 	fs.BoolVar(&opts.ShowHelp, "help", false, "")
@@ -85,6 +88,8 @@ func ParseOptions(args []string) (Options, error) {
 	fs.StringVar(&sortValue, "sort", string(SortTokensDesc), "")
 	fs.Var(&depthValue, "depth", "")
 	fs.Var(&depthValue, "d", "")
+	fs.Var(&thresholdValue, "threshold", "")
+	fs.Var(&thresholdValue, "t", "")
 	fs.BoolVar(&opts.Summarize, "summarize", false, "")
 	fs.BoolVar(&opts.Summarize, "s", false, "")
 	fs.BoolVar(&opts.NoGitIgnore, "no-gitignore", false, "")
@@ -121,6 +126,10 @@ func ParseOptions(args []string) (Options, error) {
 		depth := depthValue.value
 		opts.Depth = &depth
 	}
+	if thresholdValue.set {
+		threshold := thresholdValue.value
+		opts.Threshold = &threshold
+	}
 	if opts.Summarize && opts.Depth == nil {
 		depth := 0
 		opts.Depth = &depth
@@ -147,6 +156,9 @@ func (o Options) Validate() error {
 	if o.Depth != nil && *o.Depth < 0 {
 		return usageError(fmt.Sprintf("depth must be >= 0, got %d", *o.Depth))
 	}
+	if o.Threshold != nil && *o.Threshold == math.MinInt64 {
+		return usageError("threshold must be greater than -9223372036854775808")
+	}
 	if o.Summarize && o.Depth != nil && *o.Depth > 0 {
 		return usageError("--summarize requires --depth 0 when --depth is also provided")
 	}
@@ -159,7 +171,7 @@ func Usage() string {
 tu shows token usage for files so humans and agents can identify context-heavy files quickly.
 
 Usage:
-  tu [path] [--format <human|json|plain|csv>] [--file <path|-] [--sort <mode>] [--depth <n>] [--summarize] [--no-gitignore]
+  tu [path] [--format <human|json|plain|csv>] [--file <path|-] [--sort <mode>] [--depth <n>] [--threshold <tokens>] [--summarize] [--no-gitignore]
   tu --help
   tu --version
 
@@ -173,6 +185,7 @@ Options:
       --file           Write primary output to a file path or "-" for stdout
       --sort           One of: tokens-desc, tokens-asc, path-asc, path-desc
   -d, --depth          Limit file results by depth; use 0 for summary-only, 1 for top-level files
+  -t, --threshold      Filter displayed rows by token count; negative values keep rows below abs(threshold)
   -s, --summarize      Alias for --depth 0
       --no-gitignore   Include files ignored by .gitignore
   -q, --quiet          Suppress non-essential stderr messages
@@ -198,7 +211,7 @@ func normalizeArgs(args []string) ([]string, []string) {
 		case arg == "--":
 			positionalArgs = append(positionalArgs, args[i+1:]...)
 			return flagArgs, positionalArgs
-		case arg == "--sort" || arg == "--format" || arg == "--file" || arg == "--depth" || arg == "-d":
+		case arg == "--sort" || arg == "--format" || arg == "--file" || arg == "--depth" || arg == "-d" || arg == "--threshold" || arg == "-t":
 			flagArgs = append(flagArgs, arg)
 			if i+1 < len(args) {
 				i++
@@ -208,7 +221,9 @@ func normalizeArgs(args []string) ([]string, []string) {
 			strings.HasPrefix(arg, "--format="),
 			strings.HasPrefix(arg, "--file="),
 			strings.HasPrefix(arg, "--depth="),
-			strings.HasPrefix(arg, "-d="):
+			strings.HasPrefix(arg, "-d="),
+			strings.HasPrefix(arg, "--threshold="),
+			strings.HasPrefix(arg, "-t="):
 			flagArgs = append(flagArgs, arg)
 		case strings.HasPrefix(arg, "-") && arg != "-":
 			flagArgs = append(flagArgs, arg)
@@ -235,6 +250,30 @@ func (f *intFlag) String() string {
 
 func (f *intFlag) Set(value string) error {
 	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return err
+	}
+
+	f.set = true
+	f.value = parsed
+	return nil
+}
+
+type int64Flag struct {
+	set   bool
+	value int64
+}
+
+func (f *int64Flag) String() string {
+	if !f.set {
+		return ""
+	}
+
+	return strconv.FormatInt(f.value, 10)
+}
+
+func (f *int64Flag) Set(value string) error {
+	parsed, err := strconv.ParseInt(value, 10, 64)
 	if err != nil {
 		return err
 	}

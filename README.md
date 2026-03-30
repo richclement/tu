@@ -7,12 +7,16 @@ CLI for measuring token usage across files and directories. `du` for tokenizatio
 tu .
 tu path/to/repo --depth 1
 tu path/to/repo --summarize
+tu path/to/repo --threshold 500
+tu path/to/repo --threshold -200
 tu path/to/repo --format json --quiet
 tu path/to/file --format plain --quiet
 tu path/to/repo --format csv --file report.csv --quiet
 ```
 
-Default output is a human-readable table on stdout plus summaries or warnings on stderr. Use `--format json`, `--format plain`, or `--format csv` for automation-friendly output, and `--file` when you want any format written to a specific path instead of stdout. Use `--depth 1` to stay at the top level, `--summarize` to emit a single aggregate row for the target, and `--no-gitignore` to include files that ignore rules would normally skip.
+Default output is a human-readable table on stdout plus summaries or warnings on stderr. Use `--format json`, `--format plain`, or `--format csv` for automation-friendly output, and `--file` when you want any format written to a specific path instead of stdout. Use `--depth 1` to stay at the top level, `--summarize` to emit a single aggregate row for the target, `--threshold` to filter displayed rows by token count, and `--no-gitignore` to include files that ignore rules would normally skip.
+
+Threshold filtering is strict: positive values keep only rows with token counts greater than the threshold, `0` keeps only rows above zero, and negative values keep only rows below the absolute value. Rows without token counts, such as skipped files, are omitted when threshold filtering is active. The filter affects displayed rows only; scan summaries still describe the full scan.
 
 ## Installation
 

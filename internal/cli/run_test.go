@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/richclement/tu/internal/report"
+	"github.com/richclement/tu/internal/scan"
 	"github.com/richclement/tu/internal/testfixture"
 )
 
@@ -106,6 +108,9 @@ func TestRunJSONOutput(t *testing.T) {
 	if decoded["schema_version"] != "v1" {
 		t.Fatalf("expected schema_version v1, got %v", decoded["schema_version"])
 	}
+	if _, ok := decoded["threshold"]; ok {
+		t.Fatalf("expected threshold to be omitted when unset, got %v", decoded["threshold"])
+	}
 	summary, ok := decoded["summary"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected summary object, got %T", decoded["summary"])
@@ -134,6 +139,33 @@ func TestRunJSONOutput(t *testing.T) {
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr in quiet machine mode, got %q", stderr.String())
+	}
+}
+
+func TestRunJSONOutputIncludesThreshold(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := runWithCWD(
+		[]string{"repo", "--format", "json", "--threshold", "10", "--quiet"},
+		&stdout,
+		&stderr,
+		"dev",
+		scanFixtureParentDir(t),
+	)
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &decoded); err != nil {
+		t.Fatalf("unmarshal json output: %v", err)
+	}
+
+	if decoded["threshold"] != float64(10) {
+		t.Fatalf("expected threshold 10 in json output, got %v", decoded["threshold"])
 	}
 }
 
@@ -281,6 +313,42 @@ func TestRunHumanOutput(t *testing.T) {
 	}
 }
 
+func TestRunHumanOutputShowsNoMatchesForThreshold(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	parent := scanFixtureParentDir(t)
+
+	unfiltered, err := scan.BuildReport(scan.Config{
+		CWD:              parent,
+		Target:           "repo",
+		RespectGitIgnore: true,
+		Sort:             "tokens-desc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	exitCode := runWithCWD(
+		[]string{"repo", "--threshold", strconv.FormatInt(unfiltered.Summary.TotalTokens, 10)},
+		&stdout,
+		&stderr,
+		"dev",
+		parent,
+	)
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+	if stdout.String() != "No entries matched threshold.\n" {
+		t.Fatalf("expected no-match threshold message, got %q", stdout.String())
+	}
+	expectedSummary := "files counted: " + strconv.FormatInt(unfiltered.Summary.FilesCounted, 10)
+	if !strings.Contains(stderr.String(), expectedSummary) {
+		t.Fatalf("expected stderr summary to use full scan totals, got %q", stderr.String())
+	}
+}
+
 func TestRunWritesJSONToFile(t *testing.T) {
 	t.Parallel()
 
@@ -373,6 +441,38 @@ func TestRunWritesCSVToFile(t *testing.T) {
 	}
 	if !strings.HasPrefix(string(contents), "kind,path,tokens,method,provider,status,reason\n") {
 		t.Fatalf("expected csv header in file, got %q", string(contents))
+	}
+}
+
+func TestRunCSVThresholdNoMatchesStillWritesHeader(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	parent := scanFixtureParentDir(t)
+
+	unfiltered, err := scan.BuildReport(scan.Config{
+		CWD:              parent,
+		Target:           "repo",
+		RespectGitIgnore: true,
+		Sort:             "tokens-desc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	exitCode := runWithCWD(
+		[]string{"repo", "--format", "csv", "--threshold", strconv.FormatInt(unfiltered.Summary.TotalTokens, 10), "--quiet"},
+		&stdout,
+		&stderr,
+		"dev",
+		parent,
+	)
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+	if stdout.String() != "kind,path,tokens,method,provider,status,reason\n" {
+		t.Fatalf("expected header-only csv output, got %q", stdout.String())
 	}
 }
 
