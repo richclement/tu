@@ -123,10 +123,19 @@ func TestJSONIncludesThresholdWhenSet(t *testing.T) {
 func TestHumanEmptyResultsUsesThresholdMessageWhenSet(t *testing.T) {
 	t.Parallel()
 
-	threshold := int64(4)
-	got := Human(report.ScanReport{Threshold: &threshold})
+	got := Human(report.ScanReport{ThresholdEmptied: true})
 	if string(got) != "No entries matched threshold.\n" {
 		t.Fatalf("expected threshold-aware human message, got %q", got)
+	}
+}
+
+func TestHumanEmptyResultsUsesNoFilesMessageWhenThresholdDidNotEmptyResults(t *testing.T) {
+	t.Parallel()
+
+	threshold := int64(4)
+	got := Human(report.ScanReport{Threshold: &threshold})
+	if string(got) != "No files found.\n" {
+		t.Fatalf("expected no-files message when threshold did not empty results, got %q", got)
 	}
 }
 

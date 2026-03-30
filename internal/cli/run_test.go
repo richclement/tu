@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -83,6 +84,24 @@ func TestRunLegacyFlagUsageError(t *testing.T) {
 	}
 }
 
+func TestRunMalformedExcludeUsageError(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := Run([]string{"--exclude", "["}, &stdout, &stderr, "dev")
+	if exitCode != 2 {
+		t.Fatalf("expected exit code 2, got %d", exitCode)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "malformed") {
+		t.Fatalf("expected malformed pattern error in stderr, got %q", stderr.String())
+	}
+}
+
 func TestRunJSONOutput(t *testing.T) {
 	t.Parallel()
 
@@ -110,6 +129,9 @@ func TestRunJSONOutput(t *testing.T) {
 	}
 	if _, ok := decoded["threshold"]; ok {
 		t.Fatalf("expected threshold to be omitted when unset, got %v", decoded["threshold"])
+	}
+	if _, ok := decoded["exclude"]; ok {
+		t.Fatalf("expected exclude to be omitted when unset, got %v", decoded["exclude"])
 	}
 	summary, ok := decoded["summary"].(map[string]any)
 	if !ok {
@@ -166,6 +188,41 @@ func TestRunJSONOutputIncludesThreshold(t *testing.T) {
 
 	if decoded["threshold"] != float64(10) {
 		t.Fatalf("expected threshold 10 in json output, got %v", decoded["threshold"])
+	}
+}
+
+func TestRunJSONOutputIncludesExclude(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := runWithCWD(
+		[]string{"repo", "--format", "json", "--exclude", "README.md", "--exclude", "*.tmp", "--quiet"},
+		&stdout,
+		&stderr,
+		"dev",
+		scanFixtureParentDir(t),
+	)
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &decoded); err != nil {
+		t.Fatalf("unmarshal json output: %v", err)
+	}
+
+	rawExclude, ok := decoded["exclude"].([]any)
+	if !ok {
+		t.Fatalf("expected exclude array, got %T", decoded["exclude"])
+	}
+	got := make([]string, 0, len(rawExclude))
+	for _, value := range rawExclude {
+		got = append(got, value.(string))
+	}
+	if !slices.Equal(got, []string{"README.md", "*.tmp"}) {
+		t.Fatalf("expected exclude metadata to preserve order, got %v", got)
 	}
 }
 
@@ -349,6 +406,45 @@ func TestRunHumanOutputShowsNoMatchesForThreshold(t *testing.T) {
 	}
 }
 
+func TestRunHumanOutputExcludesMatchingEntriesAndUpdatesSummary(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	parent := scanFixtureParentDir(t)
+
+	baseline, err := scan.BuildReport(scan.Config{
+		CWD:              parent,
+		Target:           "repo",
+		Exclude:          []string{"README.md"},
+		RespectGitIgnore: true,
+		Sort:             "tokens-desc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	exitCode := runWithCWD(
+		[]string{"repo", "--exclude", "README.md"},
+		&stdout,
+		&stderr,
+		"dev",
+		parent,
+	)
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+	if strings.Contains(stdout.String(), "README.md") {
+		t.Fatalf("expected excluded entry to be absent from human output, got %q", stdout.String())
+	}
+	expectedSummary := "files counted: " + strconv.FormatInt(baseline.Summary.FilesCounted, 10) +
+		", files skipped: " + strconv.FormatInt(baseline.Summary.FilesSkipped, 10) +
+		", heuristic results: " + strconv.FormatInt(baseline.Summary.HeuristicResults, 10)
+	if !strings.Contains(stderr.String(), expectedSummary) {
+		t.Fatalf("expected summary to reflect only included files, got %q", stderr.String())
+	}
+}
+
 func TestRunWritesJSONToFile(t *testing.T) {
 	t.Parallel()
 
@@ -473,6 +569,87 @@ func TestRunCSVThresholdNoMatchesStillWritesHeader(t *testing.T) {
 	}
 	if stdout.String() != "kind,path,tokens,method,provider,status,reason\n" {
 		t.Fatalf("expected header-only csv output, got %q", stdout.String())
+	}
+}
+
+func TestRunCSVOutputExcludesMatchingEntries(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := runWithCWD(
+		[]string{"repo", "--format", "csv", "--exclude", "README.md", "--quiet"},
+		&stdout,
+		&stderr,
+		"dev",
+		scanFixtureParentDir(t),
+	)
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+	if strings.Contains(stdout.String(), "README.md") {
+		t.Fatalf("expected excluded entry to be absent from csv output, got %q", stdout.String())
+	}
+}
+
+func TestRunThresholdAppliesAfterExclude(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	parent := scanFixtureParentDir(t)
+
+	baseline, err := scan.BuildReport(scan.Config{
+		CWD:              parent,
+		Target:           "repo",
+		Exclude:          []string{"README.md"},
+		RespectGitIgnore: true,
+		Sort:             "tokens-desc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	exitCode := runWithCWD(
+		[]string{"repo", "--exclude", "README.md", "--threshold", strconv.FormatInt(baseline.Summary.TotalTokens, 10)},
+		&stdout,
+		&stderr,
+		"dev",
+		parent,
+	)
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+	if stdout.String() != "No entries matched threshold.\n" {
+		t.Fatalf("expected no-match threshold message, got %q", stdout.String())
+	}
+	expectedSummary := "files counted: " + strconv.FormatInt(baseline.Summary.FilesCounted, 10) +
+		", files skipped: " + strconv.FormatInt(baseline.Summary.FilesSkipped, 10) +
+		", heuristic results: " + strconv.FormatInt(baseline.Summary.HeuristicResults, 10)
+	if !strings.Contains(stderr.String(), expectedSummary) {
+		t.Fatalf("expected summary to reflect post-exclude totals, got %q", stderr.String())
+	}
+}
+
+func TestRunExcludeTargetWithThresholdShowsNoFilesFound(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := runWithCWD(
+		[]string{"repo", "--exclude", "repo", "--threshold", "0"},
+		&stdout,
+		&stderr,
+		"dev",
+		scanFixtureParentDir(t),
+	)
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+	if stdout.String() != "No files found.\n" {
+		t.Fatalf("expected no-files message for excluded target, got %q", stdout.String())
 	}
 }
 

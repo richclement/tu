@@ -74,6 +74,125 @@ func TestBuildReportNoGitIgnoreIncludesIgnoredFiles(t *testing.T) {
 	}
 }
 
+func TestBuildReportExcludeMatchingFileBasename(t *testing.T) {
+	t.Parallel()
+
+	report, err := BuildReport(Config{
+		CWD:              fixtureParentDir(t),
+		Target:           "repo",
+		Exclude:          []string{"README.md"},
+		RespectGitIgnore: true,
+		Sort:             "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	paths := resultPaths(report.Results)
+	if slices.Contains(paths, "README.md") {
+		t.Fatalf("expected README.md to be excluded, got %v", paths)
+	}
+	if !slices.Contains(paths, "notes.md") {
+		t.Fatalf("expected non-excluded file to remain, got %v", paths)
+	}
+}
+
+func TestBuildReportExcludeMatchingDirectoryBasenamePrunesSubtree(t *testing.T) {
+	t.Parallel()
+
+	report, err := BuildReport(Config{
+		CWD:              fixtureParentDir(t),
+		Target:           "repo",
+		Exclude:          []string{"nested"},
+		RespectGitIgnore: true,
+		Sort:             "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	paths := resultPaths(report.Results)
+	for _, excluded := range []string{"nested/child.txt", "nested/local.txt"} {
+		if slices.Contains(paths, excluded) {
+			t.Fatalf("expected nested subtree to be excluded, got %v", paths)
+		}
+	}
+}
+
+func TestBuildReportExcludeOmitsFilesFromSummaryCounts(t *testing.T) {
+	t.Parallel()
+
+	root := tempRepo(t)
+	writeFile(t, filepath.Join(root, "keep.txt"), []byte("keep this\n"))
+	writeFile(t, filepath.Join(root, "skip.txt"), []byte("skip this\n"))
+
+	report, err := BuildReport(Config{
+		CWD:              filepath.Dir(root),
+		Target:           filepath.Base(root),
+		Exclude:          []string{"skip.txt"},
+		RespectGitIgnore: true,
+		Sort:             "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	if paths := resultPaths(report.Results); !slices.Equal(paths, []string{"keep.txt"}) {
+		t.Fatalf("expected only keep.txt in results, got %v", paths)
+	}
+	if report.Summary.FilesSeen != 1 || report.Summary.FilesCounted != 1 || report.Summary.FilesSkipped != 0 {
+		t.Fatalf("expected excluded file to be absent from summary, got %+v", report.Summary)
+	}
+}
+
+func TestBuildReportExcludeOmitsSkippedFilesEntirely(t *testing.T) {
+	t.Parallel()
+
+	root := tempRepo(t)
+	writeFile(t, filepath.Join(root, "keep.txt"), []byte("keep this\n"))
+	writeFile(t, filepath.Join(root, "binary.dat"), []byte{0x00, 0x01, 0x02, 0x03})
+
+	report, err := BuildReport(Config{
+		CWD:              filepath.Dir(root),
+		Target:           filepath.Base(root),
+		Exclude:          []string{"binary.dat"},
+		RespectGitIgnore: true,
+		Sort:             "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	if slices.Contains(resultPaths(report.Results), "binary.dat") {
+		t.Fatalf("expected excluded binary file to be absent, got %+v", report.Results)
+	}
+	if report.Summary.FilesSkipped != 0 {
+		t.Fatalf("expected excluded binary file not to count as skipped, got %+v", report.Summary)
+	}
+}
+
+func TestBuildReportExcludeAppliesWhenGitIgnoreDisabled(t *testing.T) {
+	t.Parallel()
+
+	report, err := BuildReport(Config{
+		CWD:              fixtureParentDir(t),
+		Target:           "repo",
+		Exclude:          []string{"ignored", "*.tmp", "local.log"},
+		RespectGitIgnore: false,
+		Sort:             "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	paths := resultPaths(report.Results)
+	for _, excluded := range []string{"ignored/secret.txt", "debug.tmp", "nested/local.log"} {
+		if slices.Contains(paths, excluded) {
+			t.Fatalf("expected %q to be excluded even without gitignore, got %v", excluded, paths)
+		}
+	}
+}
+
 func TestBuildReportDepthOneSkipsNestedDirectories(t *testing.T) {
 	t.Parallel()
 
@@ -194,6 +313,50 @@ func TestBuildReportFileTarget(t *testing.T) {
 	}
 	if report.Results[0].Provider == nil || *report.Results[0].Provider != "openai" {
 		t.Fatalf("expected openai provider for file target, got %+v", report.Results[0].Provider)
+	}
+}
+
+func TestBuildReportExcludedFileTargetReturnsNoResultsAndZeroTotals(t *testing.T) {
+	t.Parallel()
+
+	report, err := BuildReport(Config{
+		CWD:              fixtureParentDir(t),
+		Target:           filepath.ToSlash(filepath.Join("repo", "nested", "child.txt")),
+		Exclude:          []string{"child.txt"},
+		RespectGitIgnore: true,
+		Sort:             "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	if len(report.Results) != 0 {
+		t.Fatalf("expected excluded file target to return no results, got %+v", report.Results)
+	}
+	if report.Summary != (reportpkg.Summary{}) {
+		t.Fatalf("expected zero summary for excluded file target, got %+v", report.Summary)
+	}
+}
+
+func TestBuildReportExcludedDirectoryTargetReturnsNoResultsAndZeroTotals(t *testing.T) {
+	t.Parallel()
+
+	report, err := BuildReport(Config{
+		CWD:              fixtureParentDir(t),
+		Target:           "repo",
+		Exclude:          []string{"repo"},
+		RespectGitIgnore: true,
+		Sort:             "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	if len(report.Results) != 0 {
+		t.Fatalf("expected excluded directory target to return no results, got %+v", report.Results)
+	}
+	if report.Summary != (reportpkg.Summary{}) {
+		t.Fatalf("expected zero summary for excluded directory target, got %+v", report.Summary)
 	}
 }
 
@@ -367,6 +530,64 @@ func TestBuildReportSummaryThresholdAppliesToAggregateRow(t *testing.T) {
 	}
 }
 
+func TestBuildReportSummarizeReturnsZeroSummaryRowWhenAllDescendantsExcluded(t *testing.T) {
+	t.Parallel()
+
+	root := tempRepo(t)
+	writeFile(t, filepath.Join(root, "one.txt"), []byte("one\n"))
+	writeFile(t, filepath.Join(root, "two.log"), []byte("two\n"))
+
+	report, err := BuildReport(Config{
+		CWD:              filepath.Dir(root),
+		Target:           filepath.Base(root),
+		MaxDepth:         intPtr(0),
+		Summarize:        true,
+		Exclude:          []string{"*.txt", "*.log"},
+		RespectGitIgnore: true,
+		Sort:             "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	if len(report.Results) != 1 {
+		t.Fatalf("expected one summary row, got %+v", report.Results)
+	}
+	if report.Results[0].Tokens == nil || *report.Results[0].Tokens != 0 {
+		t.Fatalf("expected zero-token summary row, got %+v", report.Results[0])
+	}
+	if report.Summary != (reportpkg.Summary{}) {
+		t.Fatalf("expected zero summary when all descendants are excluded, got %+v", report.Summary)
+	}
+}
+
+func TestBuildReportSummarizeReturnsNoRowsWhenTargetExcluded(t *testing.T) {
+	t.Parallel()
+
+	root := tempRepo(t)
+	writeFile(t, filepath.Join(root, "one.txt"), []byte("one\n"))
+
+	report, err := BuildReport(Config{
+		CWD:              filepath.Dir(root),
+		Target:           filepath.Base(root),
+		MaxDepth:         intPtr(0),
+		Summarize:        true,
+		Exclude:          []string{"repo"},
+		RespectGitIgnore: true,
+		Sort:             "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	if len(report.Results) != 0 {
+		t.Fatalf("expected excluded target summary scan to return no rows, got %+v", report.Results)
+	}
+	if report.Summary != (reportpkg.Summary{}) {
+		t.Fatalf("expected zero summary for excluded target, got %+v", report.Summary)
+	}
+}
+
 func TestBuildReportThresholdFiltersFileTarget(t *testing.T) {
 	t.Parallel()
 
@@ -402,6 +623,41 @@ func TestBuildReportThresholdFiltersFileTarget(t *testing.T) {
 	}
 	if filtered.Summary.TotalTokens != baseline.Summary.TotalTokens {
 		t.Fatalf("expected summary total tokens to remain unchanged, got %+v", filtered.Summary)
+	}
+}
+
+func TestBuildReportThresholdAfterExcludeKeepsIncludedSummaryTotals(t *testing.T) {
+	t.Parallel()
+
+	parent := fixtureParentDir(t)
+	baseline, err := BuildReport(Config{
+		CWD:              parent,
+		Target:           "repo",
+		Exclude:          []string{"README.md"},
+		RespectGitIgnore: true,
+		Sort:             "tokens-desc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	filtered, err := BuildReport(Config{
+		CWD:              parent,
+		Target:           "repo",
+		Exclude:          []string{"README.md"},
+		Threshold:        int64Ptr(baseline.Summary.TotalTokens),
+		RespectGitIgnore: true,
+		Sort:             "tokens-desc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	if len(filtered.Results) != 0 {
+		t.Fatalf("expected post-exclude threshold to filter out all rows, got %+v", filtered.Results)
+	}
+	if filtered.Summary != baseline.Summary {
+		t.Fatalf("expected summary to reflect included files only, got %+v", filtered.Summary)
 	}
 }
 
@@ -601,6 +857,35 @@ func TestBuildReportDeterministicUnderConcurrencyWithThreshold(t *testing.T) {
 	}
 }
 
+func TestBuildReportDeterministicUnderConcurrencyWithExclude(t *testing.T) {
+	t.Parallel()
+
+	parent := fixtureParentDir(t)
+	var baseline []reportpkg.Result
+
+	for i := 0; i < 5; i++ {
+		report, err := BuildReport(Config{
+			CWD:              parent,
+			Target:           "repo",
+			Exclude:          []string{"README.md"},
+			RespectGitIgnore: true,
+			Sort:             "tokens-desc",
+		})
+		if err != nil {
+			t.Fatalf("BuildReport returned error on run %d: %v", i, err)
+		}
+
+		if i == 0 {
+			baseline = report.Results
+			continue
+		}
+
+		if !slices.EqualFunc(baseline, report.Results, sameResult) {
+			t.Fatalf("expected deterministic excluded results\nbaseline: %+v\ncurrent: %+v", baseline, report.Results)
+		}
+	}
+}
+
 func TestScanSingleFileCreatesOneCounter(t *testing.T) {
 	t.Parallel()
 
@@ -629,7 +914,7 @@ func TestScanDirectoryCreatesOneCounterPerWorker(t *testing.T) {
 	rootAbs := filepath.Join(parent, "repo")
 
 	var factoryCalls atomic.Int32
-	results, err := scanDirectory(rootAbs, rootAbs, nil, nil, func() *count.Counter {
+	results, err := scanDirectory(rootAbs, rootAbs, nil, nil, nil, func() *count.Counter {
 		factoryCalls.Add(1)
 		return count.NewCounter()
 	})

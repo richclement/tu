@@ -10,7 +10,7 @@ import (
 
 func Human(scanReport report.ScanReport) []byte {
 	if len(scanReport.Results) == 0 {
-		if scanReport.Threshold != nil {
+		if scanReport.ThresholdEmptied {
 			return []byte("No entries matched threshold.\n")
 		}
 
