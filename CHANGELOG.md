@@ -22,6 +22,7 @@ All notable changes to this project will be documented in this file.
 - Added explicit per-result `kind` values to JSON and CSV output, and prefixed CSV exports with a `kind` column.
 - Extended the GitHub Actions PR test workflow with a formatting job that enforces `gofumpt` and `goimports`.
 - Added top-level JSON `exclude` metadata and documented that exclude filtering removes matching paths from both results and summary totals.
+- Reject malformed `--exclude` globs as invalid usage instead of silently treating them as literal basenames.
 
 ### Removed
 

@@ -538,10 +538,7 @@ func (matcher *excludeMatcher) shouldExclude(absPath string) bool {
 	}
 
 	for _, pattern := range matcher.patterns {
-		matched, err := path.Match(pattern, name)
-		if err != nil {
-			matched = pattern == name
-		}
+		matched, _ := path.Match(pattern, name)
 		if matched {
 			return true
 		}

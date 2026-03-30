@@ -84,6 +84,24 @@ func TestRunLegacyFlagUsageError(t *testing.T) {
 	}
 }
 
+func TestRunMalformedExcludeUsageError(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := Run([]string{"--exclude", "["}, &stdout, &stderr, "dev")
+	if exitCode != 2 {
+		t.Fatalf("expected exit code 2, got %d", exitCode)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "malformed") {
+		t.Fatalf("expected malformed pattern error in stderr, got %q", stderr.String())
+	}
+}
+
 func TestRunJSONOutput(t *testing.T) {
 	t.Parallel()
 

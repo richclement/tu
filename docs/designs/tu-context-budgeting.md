@@ -276,6 +276,7 @@ Reject:
 
 - missing path
 - unsupported sort mode
+- malformed `--exclude` glob
 - invalid flag combinations
 
 ### Flags
@@ -308,6 +309,7 @@ Semantics:
 - rows with no token count, including skipped files, never match a threshold filter.
 - `--exclude` is a scan-time filter, not a display-time filter.
 - `--exclude` matches file and directory basenames with shell-style glob semantics.
+- malformed `--exclude` globs are invalid usage.
 - excluded files and directories are never counted, never reported as skipped, and never included in summary totals.
 - repeat `--exclude` / `-I` to apply multiple masks in the order provided.
 - `--exclude` does not disable `.gitignore`; use `--no-gitignore` if you want ignored files included in the scan.

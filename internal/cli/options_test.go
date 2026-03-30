@@ -395,6 +395,20 @@ func TestParseOptionsRejectsEmptyExcludeValue(t *testing.T) {
 	}
 }
 
+func TestParseOptionsRejectsMalformedExcludePattern(t *testing.T) {
+	t.Parallel()
+
+	for _, args := range [][]string{
+		{"--exclude", "["},
+		{"--exclude", `\`},
+		{"--exclude", "foo["},
+	} {
+		if _, err := ParseOptions(args); err == nil {
+			t.Fatalf("expected malformed exclude error for args %v, got nil", args)
+		}
+	}
+}
+
 func TestParseOptionsRejectsInvalidThresholdValue(t *testing.T) {
 	t.Parallel()
 

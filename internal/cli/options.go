@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"path"
 	"strconv"
 	"strings"
 )
@@ -169,6 +170,9 @@ func (o Options) Validate() error {
 	for _, pattern := range o.Exclude {
 		if pattern == "" {
 			return usageError("exclude must not be empty")
+		}
+		if _, err := path.Match(pattern, ""); err != nil {
+			return usageError(fmt.Sprintf("exclude pattern %q is malformed", pattern))
 		}
 	}
 	if o.Summarize && o.Depth != nil && *o.Depth > 0 {
