@@ -25,29 +25,3 @@
 **Effort:** M
 **Priority:** P3
 **Depends on:** Shipping v1 and validating real demand
-
-## Distribution
-
-### Package Manager Installation
-
-**What:** Add package-manager distribution, likely Homebrew first, after the initial GitHub Releases workflow is stable.
-
-**Why:** This lowers installation friction and makes the CLI easier to adopt once the binary contract and release pipeline settle.
-
-**Context:** The eng review locked v1 distribution to GitHub Release binaries with automated cross-platform builds. After that path is stable, the next distribution step should be one mainstream install route that keeps install and uninstall simple for repeat users.
-
-**Effort:** M
-**Priority:** P2
-**Depends on:** Stable v1 release workflow
-
-### Generalize Homebrew Tap Automation
-
-**What:** Reuse the `tu` Homebrew tap PR automation pattern for other richclement CLIs such as `ralph-cli` and `tfccli` after `tu` ships stable.
-
-**Why:** This captures the obvious next reuse step without paying abstraction cost before the first implementation proves itself.
-
-**Context:** The Homebrew distribution work for `tu` intentionally keeps the release helper and workflow repo-specific. Once a few tagged `tu` releases have opened correct tap PRs and the maintenance burden is understood, this can extract the repeatable pieces into shared conventions or shared tooling. Until then, the right move is to keep the implementation boring and local to `tu`.
-
-**Effort:** M
-**Priority:** P3
-**Depends on:** Shipping `tu` Homebrew automation and validating it across multiple releases
