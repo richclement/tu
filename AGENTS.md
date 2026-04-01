@@ -1,5 +1,21 @@
 # AGENTS.md
 
+## Development
+
+```sh
+make build
+make fmt
+make test
+make vet
+make ci
+```
+
+To verify a built binary locally against the canonical fixture corpus:
+
+```sh
+make verify-release
+```
+
 ## Release Workflow
 
 - This repo uses an `Unreleased` changelog workflow.

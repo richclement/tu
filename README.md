@@ -1,22 +1,23 @@
 # tu
+
 CLI for measuring token usage across files and directories. `du` for tokenization.
 
 ## Usage
 
 ```sh
 tu .
-tu path/to/repo --depth 1
-tu path/to/repo --summarize
-tu path/to/repo --threshold 500
-tu path/to/repo --threshold -200
-tu path/to/repo --max-file-size 1000000
-tu path/to/repo --max-file-size 1MiB
-tu path/to/repo --max-file-size 1.5MiB
-tu path/to/repo --max-file-size "1.5 MB"
-tu path/to/repo --exclude node_modules --exclude '*.min.js'
-tu path/to/repo --format json --quiet
+tu path/to/directory --depth 1
+tu path/to/directory --summarize
+tu path/to/directory --threshold 500
+tu path/to/directory --threshold -200
+tu path/to/directory --max-file-size 1000000
+tu path/to/directory --max-file-size 1MiB
+tu path/to/directory --max-file-size 1.5MiB
+tu path/to/directory --max-file-size "1.5 MB"
+tu path/to/directory --exclude node_modules --exclude '*.min.js'
+tu path/to/directory --format json --quiet
 tu path/to/file --format plain --quiet
-tu path/to/repo --format csv --file report.csv --quiet
+tu path/to/directory --format csv --file report.csv --quiet
 ```
 
 Default output is a human-readable table on stdout plus summaries or warnings on stderr. Use `--format json`, `--format plain`, or `--format csv` for automation-friendly output, and `--file` when you want any format written to a specific path instead of stdout. Use `--depth 1` to stay at the top level, `--summarize` to emit a single aggregate row for the target, `--threshold` to filter displayed rows by token count, `--max-file-size` to skip files larger than a configured size before reading them, `--exclude` / `-I` to skip matching basenames during the scan, and `--no-gitignore` to include files that ignore rules would normally skip.
