@@ -14,6 +14,7 @@ func JSON(scanReport report.ScanReport) ([]byte, error) {
 	var buf bytes.Buffer
 
 	scanReport.Results = ensureResults(scanReport.Results)
+	scanReport.SymlinkMode = ensureSymlinkMode(scanReport.SymlinkMode)
 
 	encoder := json.NewEncoder(&buf)
 	encoder.SetEscapeHTML(false)
@@ -81,6 +82,14 @@ func ensureResults(results []report.Result) []report.Result {
 	}
 
 	return results
+}
+
+func ensureSymlinkMode(mode report.SymlinkMode) report.SymlinkMode {
+	if mode == "" {
+		return report.SymlinkModePhysical
+	}
+
+	return mode
 }
 
 func formatNullableInt(value *int64) string {

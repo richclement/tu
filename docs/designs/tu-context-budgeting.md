@@ -260,7 +260,7 @@ No subcommands in v1.
 Usage:
 
 ```text
-tu [path] [--format <human|json|plain|csv>] [--file <path|-] [--sort <mode>] [--depth <n>] [--threshold <tokens>] [--max-file-size <bytes|size>] [--exclude <glob>]... [--summarize] [--no-gitignore]
+tu [path] [-H | -L | -P] [--format <human|json|plain|csv>] [--file <path|-] [--sort <mode>] [--depth <n>] [--threshold <tokens>] [--max-file-size <bytes|size>] [--exclude <glob>]... [--summarize] [--no-gitignore]
 tu --help
 tu --version
 ```
@@ -288,6 +288,9 @@ Reject:
 | `--format` | string | `human` | One of `human`, `json`, `plain`, `csv` |
 | `--file` | string | `""` | Write primary output to a file path, or `-` for stdout |
 | `--sort` | string | `tokens-desc` | One of `tokens-desc`, `tokens-asc`, `path-asc`, `path-desc` |
+| `-P` | bool | `true` unless overridden | Do not follow symlinks; default mode |
+| `-H` | bool | `false` | Follow symlinks specified on the command line only |
+| `-L` | bool | `false` | Follow symlinks on the command line and during traversal |
 | `-d`, `--depth` | int | unset | Limit file results by relative depth; use `0` for a summary row and `1` for top-level files only |
 | `-t`, `--threshold` | int64 | unset | Filter displayed rows by token count; negative values keep rows below the absolute value |
 | `-I`, `--exclude` | string[] | unset | Ignore files and directories whose basename matches the glob; repeatable |
@@ -300,6 +303,11 @@ Semantics:
 - `--format` selects exactly one primary output mode.
 - `--file` changes only the primary output destination.
 - `--sort` applies to file and directory targets, even when the result set has one item.
+- `-P`, `-H`, and `-L` override each other, with the last supplied flag winning.
+- default symlink handling is `-P`.
+- `-P` reports symlinks as skipped rows with reason `symlink`.
+- `-H` follows a symlink only when the command-line target itself is a symlink.
+- `-L` follows symlinks during traversal and reports ancestor cycles as skipped rows with reason `symlink-cycle`.
 - `.gitignore` applies only when the target is inside a repo with ignore rules available.
 - `--depth` applies only to directory targets; file targets still emit one file result.
 - `--threshold` filters displayed rows after the full scan summary is computed.
@@ -485,6 +493,7 @@ Schema shape:
   "root": ".",
   "recursive": true,
   "respect_gitignore": true,
+  "symlink_mode": "physical",
   "sort": "tokens-desc",
   "threshold": 500,
   "exclude": ["node_modules", "*.min.js"],
@@ -519,6 +528,7 @@ Notes:
 
 - `schema_version` starts at `v1`
 - `root` should be the scan root as given to the formatter, not an absolute machine-specific path
+- `symlink_mode` is always present and is one of `physical`, `command-line`, or `logical`
 - `threshold` is omitted when no display filter is applied
 - `exclude` is omitted when no scan-time exclusions are applied
 

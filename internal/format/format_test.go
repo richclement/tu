@@ -88,6 +88,9 @@ func TestJSONEmptyResultsUsesArray(t *testing.T) {
 	if !bytes.Contains(got, []byte(`"results": []`)) {
 		t.Fatalf("expected empty results array, got %s", got)
 	}
+	if !bytes.Contains(got, []byte(`"symlink_mode": "physical"`)) {
+		t.Fatalf("expected default symlink_mode in json output, got %s", got)
+	}
 
 	var decoded map[string]any
 	if err := json.Unmarshal(got, &decoded); err != nil {
@@ -254,6 +257,7 @@ func sampleReport() report.ScanReport {
 		Root:             ".",
 		Recursive:        true,
 		RespectGitIgnore: true,
+		SymlinkMode:      report.SymlinkModePhysical,
 		Sort:             "tokens-desc",
 		Summary: report.Summary{
 			FilesSeen:    2,

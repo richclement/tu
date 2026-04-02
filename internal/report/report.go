@@ -2,6 +2,14 @@ package report
 
 const SchemaVersionV1 = "v1"
 
+type SymlinkMode string
+
+const (
+	SymlinkModePhysical    SymlinkMode = "physical"
+	SymlinkModeCommandLine SymlinkMode = "command-line"
+	SymlinkModeLogical     SymlinkMode = "logical"
+)
+
 type ResultKind string
 
 const (
@@ -42,16 +50,17 @@ type Result struct {
 }
 
 type ScanReport struct {
-	SchemaVersion    string   `json:"schema_version"`
-	Target           string   `json:"target"`
-	Root             string   `json:"root"`
-	Recursive        bool     `json:"recursive"`
-	RespectGitIgnore bool     `json:"respect_gitignore"`
-	Sort             string   `json:"sort"`
-	Threshold        *int64   `json:"threshold,omitempty"`
-	MaxFileSizeBytes *int64   `json:"max_file_size_bytes,omitempty"`
-	Exclude          []string `json:"exclude,omitempty"`
-	ThresholdEmptied bool     `json:"-"`
-	Summary          Summary  `json:"summary"`
-	Results          []Result `json:"results"`
+	SchemaVersion    string      `json:"schema_version"`
+	Target           string      `json:"target"`
+	Root             string      `json:"root"`
+	Recursive        bool        `json:"recursive"`
+	RespectGitIgnore bool        `json:"respect_gitignore"`
+	SymlinkMode      SymlinkMode `json:"symlink_mode"`
+	Sort             string      `json:"sort"`
+	Threshold        *int64      `json:"threshold,omitempty"`
+	MaxFileSizeBytes *int64      `json:"max_file_size_bytes,omitempty"`
+	Exclude          []string    `json:"exclude,omitempty"`
+	ThresholdEmptied bool        `json:"-"`
+	Summary          Summary     `json:"summary"`
+	Results          []Result    `json:"results"`
 }

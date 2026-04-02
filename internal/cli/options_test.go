@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strconv"
 	"testing"
+
+	"github.com/richclement/tu/internal/report"
 )
 
 func TestParseOptionsDefaults(t *testing.T) {
@@ -23,6 +25,9 @@ func TestParseOptionsDefaults(t *testing.T) {
 	}
 	if opts.Sort != SortTokensDesc {
 		t.Fatalf("expected default sort %q, got %q", SortTokensDesc, opts.Sort)
+	}
+	if opts.SymlinkMode != report.SymlinkModePhysical {
+		t.Fatalf("expected default symlink mode %q, got %q", report.SymlinkModePhysical, opts.SymlinkMode)
 	}
 }
 
@@ -76,6 +81,19 @@ func TestParseOptionsWithPathAfterFlags(t *testing.T) {
 	}
 	if opts.Depth == nil || *opts.Depth != 2 {
 		t.Fatalf("expected depth 2, got %+v", opts.Depth)
+	}
+}
+
+func TestParseOptionsSymlinkModeLastFlagWins(t *testing.T) {
+	t.Parallel()
+
+	opts, err := ParseOptions([]string{"-L", "docs", "-P", "-H"})
+	if err != nil {
+		t.Fatalf("ParseOptions returned error: %v", err)
+	}
+
+	if opts.SymlinkMode != report.SymlinkModeCommandLine {
+		t.Fatalf("expected command-line symlink mode, got %q", opts.SymlinkMode)
 	}
 }
 
