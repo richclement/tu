@@ -382,6 +382,34 @@ func TestBuildReportPhysicalAndCommandLineModesSkipInTreeSymlinks(t *testing.T) 
 	}
 }
 
+func TestBuildReportLogicalModeHonorsGitIgnoreForSymlinkAlias(t *testing.T) {
+	t.Parallel()
+
+	root := tempRepo(t)
+	writeFile(t, filepath.Join(root, ".gitignore"), []byte("aliasdir\n"))
+	writeFile(t, filepath.Join(root, "real", "child.txt"), []byte("child\n"))
+	mustSymlink(t, filepath.Join(root, "real"), filepath.Join(root, "aliasdir"))
+
+	report, err := BuildReport(Config{
+		CWD:              filepath.Dir(root),
+		Target:           filepath.Base(root),
+		SymlinkMode:      reportpkg.SymlinkModeLogical,
+		RespectGitIgnore: true,
+		Sort:             "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	paths := resultPaths(report.Results)
+	if slices.Contains(paths, "aliasdir/child.txt") {
+		t.Fatalf("expected gitignore to prune followed symlink alias, got %v", paths)
+	}
+	if !slices.Contains(paths, "real/child.txt") {
+		t.Fatalf("expected real subtree to remain visible, got %v", paths)
+	}
+}
+
 func TestBuildReportLogicalModeFollowsFileAndDirectorySymlinks(t *testing.T) {
 	t.Parallel()
 
@@ -586,6 +614,37 @@ func TestBuildReportAbsoluteRootSymlinkPhysicalModeUsesAliasBasenameForRoot(t *t
 	result := resultsByPath(report.Results)["repo-link"]
 	if result.Reason == nil || *result.Reason != "symlink" {
 		t.Fatalf("expected absolute root symlink to be skipped as symlink, got %+v", result)
+	}
+}
+
+func TestBuildReportRootFileSymlinkPhysicalModeUsesParentRoot(t *testing.T) {
+	t.Parallel()
+
+	parent := t.TempDir()
+	targetDir := filepath.Join(parent, "real")
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		t.Fatalf("mkdir target dir: %v", err)
+	}
+	targetFile := filepath.Join(targetDir, "target.txt")
+	writeFile(t, targetFile, []byte("hello from target\n"))
+	mustSymlink(t, targetFile, filepath.Join(parent, "alias.txt"))
+
+	report, err := BuildReport(Config{
+		CWD:         parent,
+		Target:      "alias.txt",
+		SymlinkMode: reportpkg.SymlinkModePhysical,
+		Sort:        "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	if report.Root != "." {
+		t.Fatalf("expected file symlink root '.', got %q", report.Root)
+	}
+	result := resultsByPath(report.Results)["alias.txt"]
+	if result.Reason == nil || *result.Reason != "symlink" {
+		t.Fatalf("expected alias.txt to be skipped as symlink, got %+v", result)
 	}
 }
 

@@ -186,7 +186,11 @@ func resolveTarget(targetAbs string, targetArg string, mode report.SymlinkMode) 
 
 	if mode == report.SymlinkModePhysical {
 		target.isDir = false
-		target.rootIsDir = true
+		if resolvedInfo, err := os.Stat(targetAbs); err == nil {
+			target.rootIsDir = resolvedInfo.IsDir()
+		} else {
+			target.rootIsDir = true
+		}
 		target.skipReason = "symlink"
 		return target, nil
 	}
@@ -433,13 +437,22 @@ func walkLogicalDirectory(
 		if isSymlink {
 			resolvedPath, err := filepath.EvalSymlinks(physicalPath)
 			if err != nil {
+				if matcher != nil && matcher.shouldIgnoreRelative(displayPath, false) {
+					continue
+				}
 				resultCh <- skippedResult(displayPath, "broken-symlink")
 				continue
 			}
 
 			resolvedInfo, err := os.Stat(resolvedPath)
 			if err != nil {
+				if matcher != nil && matcher.shouldIgnoreRelative(displayPath, false) {
+					continue
+				}
 				resultCh <- skippedResult(displayPath, classifyFollowError(err))
+				continue
+			}
+			if matcher != nil && matcher.shouldIgnoreRelative(displayPath, resolvedInfo.IsDir()) {
 				continue
 			}
 
@@ -1000,8 +1013,16 @@ func (matcher *ignoreMatcher) shouldIgnore(absPath string, isDir bool) bool {
 		return false
 	}
 
-	relPath = filepath.ToSlash(relPath)
-	if relPath == "." {
+	return matcher.shouldIgnoreRelative(relPath, isDir)
+}
+
+func (matcher *ignoreMatcher) shouldIgnoreRelative(relPath string, isDir bool) bool {
+	if matcher == nil {
+		return false
+	}
+
+	relPath = filepath.ToSlash(filepath.Clean(relPath))
+	if relPath == "." || relPath == "" {
 		return false
 	}
 
