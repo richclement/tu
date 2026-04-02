@@ -75,4 +75,5 @@ The release workflow expects a `HOMEBREW_TAP_TOKEN` secret with write access to 
 
 - [CHANGELOG.md](CHANGELOG.md)
 - [docs/designs/tu-context-budgeting.md](docs/designs/tu-context-budgeting.md)
+- [skills/tu-context-hygiene/SKILL.md](skills/tu-context-hygiene/SKILL.md)
 - [TODOS.md](TODOS.md)

@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added a `tu-context-hygiene` skill under `skills/` with scan workflow guidance, file-class budgets, document and code refactor patterns, and a standard reporting template for using `tu` to triage agent-unfriendly large files.
+
 ## [0.2.0] - 2026-03-30
 
 ### Added
