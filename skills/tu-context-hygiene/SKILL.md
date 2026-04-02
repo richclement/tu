@@ -14,10 +14,11 @@ Keep the default posture advisory. Report findings first, ask before proposing c
 ## Quick Start
 
 1. Run a shallow scan to identify root-level hotspots.
-2. Run a repo-wide JSON scan when you need to rank, classify, or compare multiple files.
-3. Group the largest files by class before opening them.
-4. Inspect large files progressively, not monolithically.
-5. Produce the standard report contract from `references/report-template.md`.
+2. Run an unfiltered repo-wide JSON inventory when you need the full shape of the repo.
+3. Run a second JSON pass for severe outliers.
+4. Group the largest files by class before opening them.
+5. Inspect large files progressively, not monolithically.
+6. Produce the standard report contract from `references/report-template.md`.
 
 See `references/scan-workflow.md` for command recipes.
 
@@ -34,10 +35,11 @@ See `references/scan-workflow.md` for command recipes.
 
 ### 1. Scan First
 
-Run the two-pass workflow from `references/scan-workflow.md`:
+Run the default scan sequence from `references/scan-workflow.md`:
 
 - Shallow/root triage: `tu . --depth 2 --threshold 300`
-- Repo-wide machine-readable triage: `tu . --format json --threshold 800`
+- Repo-wide JSON inventory: `tu . --format json`
+- Severe-outlier pass: `tu . --format json --threshold 2000`
 
 Rescan a subtree when one area is clearly hot. Use scan-time excludes when fixtures, generated output, or vendored content dominate the ranking.
 

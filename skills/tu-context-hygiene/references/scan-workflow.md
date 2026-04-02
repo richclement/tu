@@ -4,14 +4,15 @@ Use `tu` to rank files before you read them. The goal is to discover hotspots wi
 
 ## Default Command Set
 
-Prefer these two commands first:
+Prefer these three commands first:
 
 ```sh
 tu . --depth 2 --threshold 300
-tu . --format json --threshold 800
+tu . --format json
+tu . --format json --threshold 2000
 ```
 
-Use the shallow scan to spot root-level hazards such as oversized guidance docs or root readmes. Use the JSON scan when you need repo-wide ranking, path classification, or comparison across multiple large files.
+Use the shallow scan to spot root-level hazards such as oversized guidance docs or root readmes. Use the unfiltered JSON scan when you need the full repo shape. Use the severe-outlier pass when you want the worst offenders isolated quickly.
 
 ## Progressive Scan Strategy
 
@@ -31,10 +32,10 @@ Look for:
 
 ### 2. Repo-wide ranking
 
-Switch to JSON when you need the full shape:
+Switch to unfiltered JSON when you need the full shape:
 
 ```sh
-tu . --format json --threshold 800
+tu . --format json
 ```
 
 Use JSON to answer:
@@ -44,7 +45,21 @@ Use JSON to answer:
 - Are the hotspots clustered in one subtree?
 - Should you rescan a subtree with tighter thresholds?
 
-### 3. Targeted subtree rescan
+### 3. Severe-outlier pass
+
+After the full inventory, isolate the worst offenders:
+
+```sh
+tu . --format json --threshold 2000
+```
+
+Use this pass to answer:
+
+- Which files are severe regardless of file class?
+- Which hotspots deserve attention first if the repo has many medium-size files?
+- Which files should anchor the first remediation conversation?
+
+### 4. Targeted subtree rescan
 
 If one directory dominates, narrow the scope:
 
@@ -60,7 +75,7 @@ Use subtree scans to avoid treating one large local hotspot as a repo-wide patte
 Exclude files that should not drive the remediation conversation:
 
 ```sh
-tu . --format json --threshold 800 --exclude node_modules --exclude vendor --exclude '*.golden'
+tu . --format json --exclude node_modules --exclude vendor --exclude '*.golden'
 ```
 
 Common low-value candidates:
@@ -89,7 +104,7 @@ Large files are evidence, not an instruction to load everything.
 Treat thresholds as triage levers, not universal truth:
 
 - `300-600`: good for root docs and shallow triage
-- `800-1500`: good for repo-wide hotspot ranking
+- no threshold: good for repo-wide inventory and classifying the full shape
 - `2000+`: good for isolating severe outliers
 
 Prefer class-specific budgets from `file-class-rubric.md` over one global threshold.
