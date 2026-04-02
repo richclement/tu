@@ -526,6 +526,41 @@ func TestBuildReportCommandLineModeBrokenRootSymlinkReturnsBrokenSymlink(t *test
 	}
 }
 
+func TestBuildReportRootSymlinkLoopReturnsSymlinkCycle(t *testing.T) {
+	t.Parallel()
+
+	parent := t.TempDir()
+	loopPath := filepath.Join(parent, "loop")
+	mustSymlink(t, "loop", loopPath)
+
+	for _, mode := range []reportpkg.SymlinkMode{
+		reportpkg.SymlinkModeCommandLine,
+		reportpkg.SymlinkModeLogical,
+	} {
+		t.Run(string(mode), func(t *testing.T) {
+			t.Parallel()
+
+			report, err := BuildReport(Config{
+				CWD:         parent,
+				Target:      "loop",
+				SymlinkMode: mode,
+				Sort:        "path-asc",
+			})
+			if err != nil {
+				t.Fatalf("BuildReport returned error: %v", err)
+			}
+
+			result := resultsByPath(report.Results)["loop"]
+			if result.Reason == nil || *result.Reason != "symlink-cycle" {
+				t.Fatalf("expected root symlink loop to report symlink-cycle, got %+v", result)
+			}
+			if report.Root != "loop" {
+				t.Fatalf("expected root symlink loop to preserve alias root, got %q", report.Root)
+			}
+		})
+	}
+}
+
 func TestBuildReportAbsoluteRootSymlinkPhysicalModeUsesAliasBasenameForRoot(t *testing.T) {
 	t.Parallel()
 

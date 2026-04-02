@@ -667,8 +667,15 @@ func classifyFollowError(err error) string {
 	if errors.Is(err, fs.ErrPermission) || os.IsPermission(err) {
 		return "permission-denied"
 	}
+	if isSymlinkCycleError(err) {
+		return "symlink-cycle"
+	}
 
 	return "broken-symlink"
+}
+
+func isSymlinkCycleError(err error) bool {
+	return strings.Contains(strings.ToLower(err.Error()), "too many links")
 }
 
 func skippedFromError(displayPath string, err error) report.Result {
