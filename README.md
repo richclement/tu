@@ -52,6 +52,12 @@ brew install richclement/tap/tu
 
 Download the archive for your platform from the [GitHub Releases page](https://github.com/richclement/tu/releases).
 
+## Agent Skill
+
+```sh
+npx skills add richclement/tu
+```
+
 ## Development
 
 ```sh
