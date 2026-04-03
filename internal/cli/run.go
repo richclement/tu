@@ -46,6 +46,7 @@ func runWithCWD(args []string, stdout io.Writer, stderr io.Writer, version strin
 	scanReport, err := scan.BuildReport(scan.Config{
 		CWD:              cwd,
 		Target:           opts.Path,
+		SymlinkMode:      opts.SymlinkMode,
 		MaxDepth:         opts.Depth,
 		Threshold:        opts.Threshold,
 		MaxFileSizeBytes: opts.MaxFileSize,

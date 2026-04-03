@@ -4,6 +4,7 @@
   "root": ".",
   "recursive": true,
   "respect_gitignore": true,
+  "symlink_mode": "physical",
   "sort": "tokens-desc",
   "summary": {
     "files_seen": 2,

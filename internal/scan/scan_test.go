@@ -249,6 +249,519 @@ func TestBuildReportDepthTwoIncludesNestedFiles(t *testing.T) {
 	}
 }
 
+func TestBuildReportRootSymlinkPhysicalModeReturnsSkippedResult(t *testing.T) {
+	t.Parallel()
+
+	parent := fixtureParentDir(t)
+	root := filepath.Join(parent, "repo")
+	mustSymlink(t, root, filepath.Join(parent, "repo-link"))
+
+	report, err := BuildReport(Config{
+		CWD:              parent,
+		Target:           "repo-link",
+		SymlinkMode:      reportpkg.SymlinkModePhysical,
+		RespectGitIgnore: true,
+		Sort:             "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+	if report.Root != "repo-link" {
+		t.Fatalf("expected skipped root symlink to preserve alias root, got %q", report.Root)
+	}
+
+	result := resultsByPath(report.Results)["repo-link"]
+	if result.Reason == nil || *result.Reason != "symlink" {
+		t.Fatalf("expected repo-link to be skipped as symlink, got %+v", result)
+	}
+	if report.Summary.FilesSeen != 1 || report.Summary.FilesSkipped != 1 {
+		t.Fatalf("expected skipped root symlink summary, got %+v", report.Summary)
+	}
+}
+
+func TestBuildReportCommandLineModeFollowsRootSymlinkAndPreservesAlias(t *testing.T) {
+	t.Parallel()
+
+	parent := fixtureParentDir(t)
+	root := filepath.Join(parent, "repo")
+	mustSymlink(t, root, filepath.Join(parent, "repo-link"))
+
+	report, err := BuildReport(Config{
+		CWD:              parent,
+		Target:           "repo-link",
+		SymlinkMode:      reportpkg.SymlinkModeCommandLine,
+		RespectGitIgnore: true,
+		Sort:             "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	if report.Root != "repo-link" {
+		t.Fatalf("expected alias root repo-link, got %q", report.Root)
+	}
+	paths := resultPaths(report.Results)
+	if !slices.Contains(paths, "README.md") || !slices.Contains(paths, "nested/child.txt") {
+		t.Fatalf("expected followed root symlink contents, got %v", paths)
+	}
+	for _, ignored := range []string{"ignored/secret.txt", "debug.tmp", "nested/local.log"} {
+		if slices.Contains(paths, ignored) {
+			t.Fatalf("expected gitignore to still apply through root symlink, got %v", paths)
+		}
+	}
+}
+
+func TestBuildReportCommandLineModeFollowsRootFileSymlink(t *testing.T) {
+	t.Parallel()
+
+	parent := t.TempDir()
+	targetDir := filepath.Join(parent, "real")
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		t.Fatalf("mkdir target dir: %v", err)
+	}
+	targetFile := filepath.Join(targetDir, "target.txt")
+	writeFile(t, targetFile, []byte("hello from target\n"))
+	mustSymlink(t, targetFile, filepath.Join(parent, "alias.txt"))
+
+	report, err := BuildReport(Config{
+		CWD:         parent,
+		Target:      "alias.txt",
+		SymlinkMode: reportpkg.SymlinkModeCommandLine,
+		Sort:        "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	if report.Root != "." {
+		t.Fatalf("expected file symlink root '.', got %q", report.Root)
+	}
+	result := resultsByPath(report.Results)["alias.txt"]
+	if result.Status != reportpkg.StatusCounted {
+		t.Fatalf("expected alias.txt to be counted, got %+v", result)
+	}
+}
+
+func TestBuildReportPhysicalAndCommandLineModesSkipInTreeSymlinks(t *testing.T) {
+	t.Parallel()
+
+	for _, mode := range []reportpkg.SymlinkMode{
+		reportpkg.SymlinkModePhysical,
+		reportpkg.SymlinkModeCommandLine,
+	} {
+		t.Run(string(mode), func(t *testing.T) {
+			t.Parallel()
+
+			root := tempRepo(t)
+			writeFile(t, filepath.Join(root, "real", "child.txt"), []byte("child\n"))
+			mustSymlink(t, filepath.Join(root, "real"), filepath.Join(root, "linkdir"))
+			mustSymlink(t, filepath.Join(root, "real", "child.txt"), filepath.Join(root, "link.txt"))
+
+			report, err := BuildReport(Config{
+				CWD:              filepath.Dir(root),
+				Target:           filepath.Base(root),
+				SymlinkMode:      mode,
+				RespectGitIgnore: true,
+				Sort:             "path-asc",
+			})
+			if err != nil {
+				t.Fatalf("BuildReport returned error: %v", err)
+			}
+
+			byPath := resultsByPath(report.Results)
+			if byPath["linkdir"].Reason == nil || *byPath["linkdir"].Reason != "symlink" {
+				t.Fatalf("expected linkdir to be skipped as symlink, got %+v", byPath["linkdir"])
+			}
+			if byPath["link.txt"].Reason == nil || *byPath["link.txt"].Reason != "symlink" {
+				t.Fatalf("expected link.txt to be skipped as symlink, got %+v", byPath["link.txt"])
+			}
+			if _, ok := byPath["linkdir/child.txt"]; ok {
+				t.Fatalf("expected command mode %q not to follow in-tree directory symlink, got %+v", mode, byPath["linkdir/child.txt"])
+			}
+		})
+	}
+}
+
+func TestBuildReportLogicalModeHonorsGitIgnoreForSymlinkAlias(t *testing.T) {
+	t.Parallel()
+
+	root := tempRepo(t)
+	writeFile(t, filepath.Join(root, ".gitignore"), []byte("aliasdir\n"))
+	writeFile(t, filepath.Join(root, "real", "child.txt"), []byte("child\n"))
+	mustSymlink(t, filepath.Join(root, "real"), filepath.Join(root, "aliasdir"))
+
+	report, err := BuildReport(Config{
+		CWD:              filepath.Dir(root),
+		Target:           filepath.Base(root),
+		SymlinkMode:      reportpkg.SymlinkModeLogical,
+		RespectGitIgnore: true,
+		Sort:             "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	paths := resultPaths(report.Results)
+	if slices.Contains(paths, "aliasdir/child.txt") {
+		t.Fatalf("expected gitignore to prune followed symlink alias, got %v", paths)
+	}
+	if !slices.Contains(paths, "real/child.txt") {
+		t.Fatalf("expected real subtree to remain visible, got %v", paths)
+	}
+}
+
+func TestBuildReportLogicalModeFollowsFileAndDirectorySymlinks(t *testing.T) {
+	t.Parallel()
+
+	root := tempRepo(t)
+	writeFile(t, filepath.Join(root, "real", "child.txt"), []byte("child\n"))
+	mustSymlink(t, filepath.Join(root, "real"), filepath.Join(root, "linkdir"))
+	mustSymlink(t, filepath.Join(root, "real", "child.txt"), filepath.Join(root, "link.txt"))
+
+	report, err := BuildReport(Config{
+		CWD:              filepath.Dir(root),
+		Target:           filepath.Base(root),
+		SymlinkMode:      reportpkg.SymlinkModeLogical,
+		RespectGitIgnore: true,
+		Sort:             "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	byPath := resultsByPath(report.Results)
+	if byPath["link.txt"].Status != reportpkg.StatusCounted {
+		t.Fatalf("expected file symlink to be counted in logical mode, got %+v", byPath["link.txt"])
+	}
+	if byPath["linkdir/child.txt"].Status != reportpkg.StatusCounted {
+		t.Fatalf("expected directory symlink child to be counted in logical mode, got %+v", byPath["linkdir/child.txt"])
+	}
+}
+
+func TestBuildReportLogicalModeTraversesRepeatedAliases(t *testing.T) {
+	t.Parallel()
+
+	root := tempRepo(t)
+	writeFile(t, filepath.Join(root, "real", "sub", "child.txt"), []byte("child\n"))
+	mustSymlink(t, filepath.Join(root, "real"), filepath.Join(root, "link-one"))
+	mustSymlink(t, filepath.Join(root, "real"), filepath.Join(root, "link-two"))
+
+	report, err := BuildReport(Config{
+		CWD:              filepath.Dir(root),
+		Target:           filepath.Base(root),
+		SymlinkMode:      reportpkg.SymlinkModeLogical,
+		RespectGitIgnore: true,
+		Sort:             "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	paths := resultPaths(report.Results)
+	for _, expected := range []string{"real/sub/child.txt", "link-one/sub/child.txt", "link-two/sub/child.txt"} {
+		if !slices.Contains(paths, expected) {
+			t.Fatalf("expected repeated logical alias path %q, got %v", expected, paths)
+		}
+	}
+}
+
+func TestBuildReportLogicalModeReportsSymlinkCyclesWithoutFailing(t *testing.T) {
+	t.Parallel()
+
+	root := tempRepo(t)
+	writeFile(t, filepath.Join(root, "real", "child.txt"), []byte("child\n"))
+	mustSymlink(t, root, filepath.Join(root, "real", "back"))
+
+	report, err := BuildReport(Config{
+		CWD:              filepath.Dir(root),
+		Target:           filepath.Base(root),
+		SymlinkMode:      reportpkg.SymlinkModeLogical,
+		RespectGitIgnore: true,
+		Sort:             "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	result := resultsByPath(report.Results)["real/back"]
+	if result.Reason == nil || *result.Reason != "symlink-cycle" {
+		t.Fatalf("expected logical cycle to be reported, got %+v", result)
+	}
+	if report.Summary.FilesSkipped == 0 {
+		t.Fatalf("expected cycle to increment skipped count, got %+v", report.Summary)
+	}
+}
+
+func TestBuildReportBrokenSymlinkResultsMatchMode(t *testing.T) {
+	t.Parallel()
+
+	root := tempRepo(t)
+	mustSymlink(t, filepath.Join(root, "missing.txt"), filepath.Join(root, "broken.txt"))
+
+	testCases := []struct {
+		mode       reportpkg.SymlinkMode
+		wantReason string
+	}{
+		{mode: reportpkg.SymlinkModeCommandLine, wantReason: "symlink"},
+		{mode: reportpkg.SymlinkModeLogical, wantReason: "broken-symlink"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(string(tc.mode), func(t *testing.T) {
+			t.Parallel()
+
+			report, err := BuildReport(Config{
+				CWD:              filepath.Dir(root),
+				Target:           filepath.Base(root),
+				SymlinkMode:      tc.mode,
+				RespectGitIgnore: true,
+				Sort:             "path-asc",
+			})
+			if err != nil {
+				t.Fatalf("BuildReport returned error: %v", err)
+			}
+
+			result := resultsByPath(report.Results)["broken.txt"]
+			if result.Reason == nil || *result.Reason != tc.wantReason {
+				t.Fatalf("expected broken.txt reason %q, got %+v", tc.wantReason, result)
+			}
+		})
+	}
+}
+
+func TestBuildReportCommandLineModeBrokenRootSymlinkReturnsBrokenSymlink(t *testing.T) {
+	t.Parallel()
+
+	parent := t.TempDir()
+	mustSymlink(t, filepath.Join(parent, "missing.txt"), filepath.Join(parent, "broken-root.txt"))
+
+	report, err := BuildReport(Config{
+		CWD:         parent,
+		Target:      "broken-root.txt",
+		SymlinkMode: reportpkg.SymlinkModeCommandLine,
+		Sort:        "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	result := resultsByPath(report.Results)["broken-root.txt"]
+	if result.Reason == nil || *result.Reason != "broken-symlink" {
+		t.Fatalf("expected broken root symlink result, got %+v", result)
+	}
+	if report.Root != "broken-root.txt" {
+		t.Fatalf("expected broken root symlink to preserve alias root, got %q", report.Root)
+	}
+}
+
+func TestBuildReportRootSymlinkLoopReturnsSymlinkCycle(t *testing.T) {
+	t.Parallel()
+
+	parent := t.TempDir()
+	loopPath := filepath.Join(parent, "loop")
+	mustSymlink(t, "loop", loopPath)
+
+	for _, mode := range []reportpkg.SymlinkMode{
+		reportpkg.SymlinkModeCommandLine,
+		reportpkg.SymlinkModeLogical,
+	} {
+		t.Run(string(mode), func(t *testing.T) {
+			t.Parallel()
+
+			report, err := BuildReport(Config{
+				CWD:         parent,
+				Target:      "loop",
+				SymlinkMode: mode,
+				Sort:        "path-asc",
+			})
+			if err != nil {
+				t.Fatalf("BuildReport returned error: %v", err)
+			}
+
+			result := resultsByPath(report.Results)["loop"]
+			if result.Reason == nil || *result.Reason != "symlink-cycle" {
+				t.Fatalf("expected root symlink loop to report symlink-cycle, got %+v", result)
+			}
+			if report.Root != "loop" {
+				t.Fatalf("expected root symlink loop to preserve alias root, got %q", report.Root)
+			}
+		})
+	}
+}
+
+func TestBuildReportAbsoluteRootSymlinkPhysicalModeUsesAliasBasenameForRoot(t *testing.T) {
+	t.Parallel()
+
+	parent := fixtureParentDir(t)
+	root := filepath.Join(parent, "repo")
+	linkPath := filepath.Join(parent, "repo-link")
+	mustSymlink(t, root, linkPath)
+
+	report, err := BuildReport(Config{
+		CWD:              parent,
+		Target:           linkPath,
+		SymlinkMode:      reportpkg.SymlinkModePhysical,
+		RespectGitIgnore: true,
+		Sort:             "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	if report.Root != "repo-link" {
+		t.Fatalf("expected absolute skipped root symlink to use alias basename, got %q", report.Root)
+	}
+	result := resultsByPath(report.Results)["repo-link"]
+	if result.Reason == nil || *result.Reason != "symlink" {
+		t.Fatalf("expected absolute root symlink to be skipped as symlink, got %+v", result)
+	}
+}
+
+func TestBuildReportRootFileSymlinkPhysicalModeUsesParentRoot(t *testing.T) {
+	t.Parallel()
+
+	parent := t.TempDir()
+	targetDir := filepath.Join(parent, "real")
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		t.Fatalf("mkdir target dir: %v", err)
+	}
+	targetFile := filepath.Join(targetDir, "target.txt")
+	writeFile(t, targetFile, []byte("hello from target\n"))
+	mustSymlink(t, targetFile, filepath.Join(parent, "alias.txt"))
+
+	report, err := BuildReport(Config{
+		CWD:         parent,
+		Target:      "alias.txt",
+		SymlinkMode: reportpkg.SymlinkModePhysical,
+		Sort:        "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	if report.Root != "." {
+		t.Fatalf("expected file symlink root '.', got %q", report.Root)
+	}
+	result := resultsByPath(report.Results)["alias.txt"]
+	if result.Reason == nil || *result.Reason != "symlink" {
+		t.Fatalf("expected alias.txt to be skipped as symlink, got %+v", result)
+	}
+}
+
+func TestBuildReportLogicalModeDoesNotApplyRepoGitIgnoreOutsideRepo(t *testing.T) {
+	t.Parallel()
+
+	root := tempRepo(t)
+	writeFile(t, filepath.Join(root, ".gitignore"), []byte("secret.txt\n"))
+	writeFile(t, filepath.Join(root, "secret.txt"), []byte("ignored in repo\n"))
+
+	externalParent := t.TempDir()
+	externalDir := filepath.Join(externalParent, "external")
+	writeFile(t, filepath.Join(externalDir, "secret.txt"), []byte("outside repo\n"))
+	mustSymlink(t, externalDir, filepath.Join(root, "external"))
+
+	report, err := BuildReport(Config{
+		CWD:              filepath.Dir(root),
+		Target:           filepath.Base(root),
+		SymlinkMode:      reportpkg.SymlinkModeLogical,
+		RespectGitIgnore: true,
+		Sort:             "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	paths := resultPaths(report.Results)
+	if slices.Contains(paths, "secret.txt") {
+		t.Fatalf("expected repo secret.txt to be ignored, got %v", paths)
+	}
+	if !slices.Contains(paths, "external/secret.txt") {
+		t.Fatalf("expected external secret.txt to bypass repo gitignore, got %v", paths)
+	}
+}
+
+func TestBuildReportLogicalModeExcludeUsesAliasBasename(t *testing.T) {
+	t.Parallel()
+
+	root := tempRepo(t)
+	writeFile(t, filepath.Join(root, "real", "child.txt"), []byte("child\n"))
+	mustSymlink(t, filepath.Join(root, "real"), filepath.Join(root, "aliasdir"))
+
+	report, err := BuildReport(Config{
+		CWD:              filepath.Dir(root),
+		Target:           filepath.Base(root),
+		SymlinkMode:      reportpkg.SymlinkModeLogical,
+		Exclude:          []string{"aliasdir"},
+		RespectGitIgnore: true,
+		Sort:             "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	paths := resultPaths(report.Results)
+	if slices.Contains(paths, "aliasdir/child.txt") {
+		t.Fatalf("expected aliasdir subtree to be excluded, got %v", paths)
+	}
+	if !slices.Contains(paths, "real/child.txt") {
+		t.Fatalf("expected real subtree to remain, got %v", paths)
+	}
+}
+
+func TestBuildReportLogicalModeDepthUsesAliasPath(t *testing.T) {
+	t.Parallel()
+
+	root := tempRepo(t)
+	writeFile(t, filepath.Join(root, "real", "child.txt"), []byte("child\n"))
+	mustSymlink(t, filepath.Join(root, "real"), filepath.Join(root, "aliasdir"))
+
+	report, err := BuildReport(Config{
+		CWD:              filepath.Dir(root),
+		Target:           filepath.Base(root),
+		SymlinkMode:      reportpkg.SymlinkModeLogical,
+		MaxDepth:         intPtr(1),
+		RespectGitIgnore: true,
+		Sort:             "path-asc",
+	})
+	if err != nil {
+		t.Fatalf("BuildReport returned error: %v", err)
+	}
+
+	if slices.Contains(resultPaths(report.Results), "aliasdir/child.txt") {
+		t.Fatalf("expected logical depth to prune alias subtree, got %v", resultPaths(report.Results))
+	}
+}
+
+func TestBuildReportLogicalModeIsDeterministic(t *testing.T) {
+	t.Parallel()
+
+	root := tempRepo(t)
+	writeFile(t, filepath.Join(root, "real", "child.txt"), []byte("child\n"))
+	mustSymlink(t, filepath.Join(root, "real"), filepath.Join(root, "aliasdir"))
+
+	var baseline []reportpkg.Result
+	for i := 0; i < 5; i++ {
+		report, err := BuildReport(Config{
+			CWD:              filepath.Dir(root),
+			Target:           filepath.Base(root),
+			SymlinkMode:      reportpkg.SymlinkModeLogical,
+			RespectGitIgnore: true,
+			Sort:             "tokens-desc",
+		})
+		if err != nil {
+			t.Fatalf("BuildReport returned error on run %d: %v", i, err)
+		}
+
+		if i == 0 {
+			baseline = report.Results
+			continue
+		}
+		if !slices.EqualFunc(baseline, report.Results, sameResult) {
+			t.Fatalf("expected deterministic logical results\nbaseline: %+v\ncurrent: %+v", baseline, report.Results)
+		}
+	}
+}
+
 func TestBuildReportSummarizeReturnsSingleSummaryRow(t *testing.T) {
 	t.Parallel()
 
@@ -736,7 +1249,10 @@ func TestScanFileCountsLargeFilesWhenNoMaxFileSizeIsSet(t *testing.T) {
 	filePath := filepath.Join(root, "large.txt")
 	writeFile(t, filePath, slices.Repeat([]byte("x"), size))
 
-	result := scanFile(filePath, root, nil, count.NewCounterWithImplementations(
+	result := scanTaskFile(scanTask{
+		physicalAbs: filePath,
+		displayPath: relativePath(root, filePath),
+	}, nil, count.NewCounterWithImplementations(
 		stubTextCounter{err: errors.New("force heuristic fallback")},
 		stubTextCounter{result: count.Result{Tokens: 7, Method: reportpkg.MethodHeuristic, Provider: count.HeuristicProvider}},
 	))
@@ -786,7 +1302,10 @@ func TestScanFileCountsFileAtExactMaxFileSizeBoundary(t *testing.T) {
 	filePath := filepath.Join(root, "boundary.txt")
 	writeFile(t, filePath, slices.Repeat([]byte("x"), int(limit)))
 
-	result := scanFile(filePath, root, &limit, count.NewCounterWithImplementations(
+	result := scanTaskFile(scanTask{
+		physicalAbs: filePath,
+		displayPath: relativePath(root, filePath),
+	}, &limit, count.NewCounterWithImplementations(
 		stubTextCounter{err: errors.New("force heuristic fallback")},
 		stubTextCounter{result: count.Result{Tokens: 9, Method: reportpkg.MethodHeuristic, Provider: count.HeuristicProvider}},
 	))
@@ -949,7 +1468,10 @@ func TestScanSingleFileCreatesOneCounter(t *testing.T) {
 	fileAbs := filepath.Join(rootAbs, "README.md")
 
 	var factoryCalls atomic.Int32
-	result := scanSingleFile(fileAbs, rootAbs, nil, func() *count.Counter {
+	result := scanSingleFile(scanTask{
+		physicalAbs: fileAbs,
+		displayPath: relativePath(rootAbs, fileAbs),
+	}, nil, func() *count.Counter {
 		factoryCalls.Add(1)
 		return count.NewCounter()
 	})
@@ -969,7 +1491,7 @@ func TestScanDirectoryCreatesOneCounterPerWorker(t *testing.T) {
 	rootAbs := filepath.Join(parent, "repo")
 
 	var factoryCalls atomic.Int32
-	results, err := scanDirectory(rootAbs, rootAbs, nil, nil, nil, nil, func() *count.Counter {
+	results, err := scanPhysicalDirectory(rootAbs, rootAbs, nil, nil, nil, nil, func() *count.Counter {
 		factoryCalls.Add(1)
 		return count.NewCounter()
 	})
@@ -1057,6 +1579,17 @@ func writeFile(t *testing.T, path string, contents []byte) {
 	}
 	if err := os.WriteFile(path, contents, 0o600); err != nil {
 		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+func mustSymlink(t *testing.T, target string, link string) {
+	t.Helper()
+
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", filepath.Dir(link), err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatalf("symlink %s -> %s: %v", link, target, err)
 	}
 }
 

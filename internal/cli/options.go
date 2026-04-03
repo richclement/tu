@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/richclement/tu/internal/report"
 )
 
 type OutputMode string
@@ -67,6 +69,7 @@ type Options struct {
 	Output      OutputMode
 	File        string
 	Sort        SortMode
+	SymlinkMode report.SymlinkMode
 	Depth       *int
 	Threshold   *int64
 	MaxFileSize *int64
@@ -80,9 +83,10 @@ type Options struct {
 
 func DefaultOptions() Options {
 	return Options{
-		Path:   ".",
-		Output: OutputHuman,
-		Sort:   SortTokensDesc,
+		Path:        ".",
+		Output:      OutputHuman,
+		Sort:        SortTokensDesc,
+		SymlinkMode: report.SymlinkModePhysical,
 	}
 }
 
@@ -100,6 +104,9 @@ func ParseOptions(args []string) (Options, error) {
 		thresholdValue int64Flag
 		maxFileSize    byteSizeFlag
 		excludeValue   stringSliceFlag
+		followPhysical bool
+		followCLI      bool
+		followLogical  bool
 	)
 
 	fs.BoolVar(&opts.ShowHelp, "help", false, "")
@@ -118,6 +125,9 @@ func ParseOptions(args []string) (Options, error) {
 	fs.BoolVar(&opts.Summarize, "summarize", false, "")
 	fs.BoolVar(&opts.Summarize, "s", false, "")
 	fs.BoolVar(&opts.NoGitIgnore, "no-gitignore", false, "")
+	fs.BoolVar(&followPhysical, "P", false, "")
+	fs.BoolVar(&followCLI, "H", false, "")
+	fs.BoolVar(&followLogical, "L", false, "")
 	fs.BoolVar(&opts.Quiet, "quiet", false, "")
 	fs.BoolVar(&opts.Quiet, "q", false, "")
 
@@ -145,6 +155,7 @@ func ParseOptions(args []string) (Options, error) {
 		}
 	}
 
+	opts.SymlinkMode = resolveSymlinkMode(args)
 	opts.Sort = SortMode(sortValue)
 	opts.Output = OutputMode(formatValue)
 	if depthValue.set {
@@ -214,7 +225,7 @@ func Usage() string {
 tu shows token usage for files so humans and agents can identify context-heavy files quickly.
 
 Usage:
-  tu [path] [--format <human|json|plain|csv>] [--file <path|-] [--sort <mode>] [--depth <n>] [--threshold <tokens>] [--max-file-size <bytes|size>] [--exclude <glob>]... [--summarize] [--no-gitignore]
+  tu [path] [-H | -L | -P] [--format <human|json|plain|csv>] [--file <path|-] [--sort <mode>] [--depth <n>] [--threshold <tokens>] [--max-file-size <bytes|size>] [--exclude <glob>]... [--summarize] [--no-gitignore]
   tu --help
   tu --version
 
@@ -227,6 +238,9 @@ Options:
       --format         One of: human, json, plain, csv
       --file           Write primary output to a file path or "-" for stdout
       --sort           One of: tokens-desc, tokens-asc, path-asc, path-desc
+  -P                  Do not follow symlinks; default behavior
+  -H                  Follow symlinks specified on the command line only
+  -L                  Follow symlinks on the command line and during traversal
   -d, --depth          Limit file results by depth; use 0 for summary-only, 1 for top-level files
   -t, --threshold      Filter displayed rows by token count; negative values keep rows below abs(threshold)
       --max-file-size  Skip files larger than this limit before reading; accepts bytes or sizes like 1MiB, 1.5MB, 512KiB
@@ -281,6 +295,25 @@ func normalizeArgs(args []string) ([]string, []string) {
 	}
 
 	return flagArgs, positionalArgs
+}
+
+func resolveSymlinkMode(args []string) report.SymlinkMode {
+	mode := report.SymlinkModePhysical
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--":
+			return mode
+		case "-P":
+			mode = report.SymlinkModePhysical
+		case "-H":
+			mode = report.SymlinkModeCommandLine
+		case "-L":
+			mode = report.SymlinkModeLogical
+		}
+	}
+
+	return mode
 }
 
 type intFlag struct {

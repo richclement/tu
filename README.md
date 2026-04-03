@@ -6,6 +6,9 @@ CLI for measuring token usage across files and directories. `du` for tokenizatio
 
 ```sh
 tu .
+tu -P path/to/directory
+tu -H path/to/symlinked-directory
+tu -L path/to/directory
 tu path/to/directory --depth 1
 tu path/to/directory --summarize
 tu path/to/directory --threshold 500
@@ -20,7 +23,9 @@ tu path/to/file --format plain --quiet
 tu path/to/directory --format csv --file report.csv --quiet
 ```
 
-Default output is a human-readable table on stdout plus summaries or warnings on stderr. Use `--format json`, `--format plain`, or `--format csv` for automation-friendly output, and `--file` when you want any format written to a specific path instead of stdout. Use `--depth 1` to stay at the top level, `--summarize` to emit a single aggregate row for the target, `--threshold` to filter displayed rows by token count, `--max-file-size` to skip files larger than a configured size before reading them, `--exclude` / `-I` to skip matching basenames during the scan, and `--no-gitignore` to include files that ignore rules would normally skip.
+Default output is a human-readable table on stdout plus summaries or warnings on stderr. Use `--format json`, `--format plain`, or `--format csv` for automation-friendly output, and `--file` when you want any format written to a specific path instead of stdout. Use `--depth 1` to stay at the top level, `--summarize` to emit a single aggregate row for the target, `--threshold` to filter displayed rows by token count, `--max-file-size` to skip files larger than a configured size before reading them, `--exclude` / `-I` to skip matching basenames during the scan, `--no-gitignore` to include files that ignore rules would normally skip, and `-P` / `-H` / `-L` to control symlink traversal.
+
+Symlink handling mirrors `du`: `-P` is the default and does not follow symlinks, `-H` follows symlinks given on the command line only, and `-L` follows symlinks on the command line and during traversal. Non-followed symlinks are reported as skipped with reason `symlink`. Followed broken symlinks are reported as `broken-symlink`, and `-L` reports ancestor cycles as `symlink-cycle` instead of recursing forever. JSON output includes the active mode in top-level `symlink_mode` metadata.
 
 Threshold filtering is strict: positive values keep only rows with token counts greater than the threshold, `0` keeps only rows above zero, and negative values keep only rows below the absolute value. Rows without token counts, such as skipped files, are omitted when threshold filtering is active. The filter affects displayed rows only; scan summaries still describe the full scan.
 

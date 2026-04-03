@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Added
 
 - Added a `tu-context-hygiene` skill under `skills/` with scan workflow guidance, file-class budgets, document and code refactor patterns, and a standard reporting template for using `tu` to triage agent-unfriendly large files.
+- Added `du`-style symlink traversal flags `-P`, `-H`, and `-L`, along with top-level JSON `symlink_mode` metadata and explicit skipped reasons for symlink, broken-symlink, and symlink-cycle cases.
 
 ## [0.2.0] - 2026-03-30
 
