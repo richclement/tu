@@ -82,6 +82,15 @@ After the release assets are live, the workflow parses `dist/release/checksums.t
 
 The release workflow expects a `HOMEBREW_TAP_TOKEN` secret with write access to `richclement/homebrew-tap` contents and pull requests. The secondary cross-built arch archives are packaged in CI but not executed on GitHub-hosted runners.
 
+Use this checklist when cutting a release:
+
+1. Confirm the latest published tag with `git tag --sort=version:refname`.
+2. Keep `VERSION` on the next unreleased target version and make sure it matches the version you plan to tag.
+3. Move the entries under `## [Unreleased]` in `CHANGELOG.md` into a dated section for that version.
+4. Run `make ci` and `make verify-release`.
+5. Commit the release-prep changes, create the matching `vMAJOR.MINOR.PATCH` tag, and push the branch plus tag.
+6. Watch the GitHub Actions release workflow, then verify the GitHub Release assets and the Homebrew tap pull request it opens.
+
 ## Documentation
 
 - [CHANGELOG.md](CHANGELOG.md)
